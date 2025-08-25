@@ -14,21 +14,73 @@ body {
 header {
     background: rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(10px);
-    padding: 2rem;
-    text-align: center;
+    padding: 1.5rem 2rem;
     color: white;
     border-bottom: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-header h1 {
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.header-left h1 {
     font-size: 2.5rem;
     margin-bottom: 0.5rem;
     font-weight: 300;
 }
 
-header p {
+.header-left p {
     opacity: 0.8;
     font-size: 1.1rem;
+    margin: 0;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.user-info span {
+    font-weight: 500;
+}
+
+.auth-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn.logout {
+    background: rgba(244, 67, 54, 0.8);
+    color: white;
+    border: 1px solid rgba(244, 67, 54, 0.5);
+}
+
+.btn.logout:hover {
+    background: rgba(244, 67, 54, 1);
+    transform: translateY(-2px);
+}
+
+@media (max-width: 768px) {
+    .header-content {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+    }
+    
+    .header-left h1 {
+        font-size: 2rem;
+    }
 }
 
 .container {
@@ -87,6 +139,12 @@ header p {
     transform: translateY(-2px);
 }
 
+.btn.active {
+    background: rgba(255, 255, 255, 0.4) !important;
+    border: 1px solid rgba(255, 255, 255, 0.6) !important;
+    font-weight: 600;
+}
+
 .content {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -141,11 +199,39 @@ header p {
 .list-item h4 {
     margin-bottom: 0.25rem;
     color: #333;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .list-item p {
     color: #666;
     font-size: 0.9rem;
+}
+
+.owner-badge {
+    background: #4CAF50;
+    color: white;
+    padding: 0.2rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: bold;
+}
+
+.modal-footer {
+    text-align: center;
+    margin-top: 1rem;
+    font-size: 0.9rem;
+}
+
+.modal-footer a {
+    color: #4CAF50;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.modal-footer a:hover {
+    text-decoration: underline;
 }
 
 .empty-state {

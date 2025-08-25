@@ -1,52 +1,259 @@
 // API Base URL
 const API_BASE = '/api';
 
+// Authentication state
+let currentUser = null;
+let authToken = localStorage.getItem('authToken');
+
 // DOM Elements
 const addSongBtn = document.getElementById('add-song-btn');
 const createPlaylistBtn = document.getElementById('create-playlist-btn');
 const refreshBtn = document.getElementById('refresh-btn');
+const mySongsBtn = document.getElementById('my-songs-btn');
+const myPlaylistsBtn = document.getElementById('my-playlists-btn');
+const allContentBtn = document.getElementById('all-content-btn');
 const songsListEl = document.getElementById('songs-list');
 const playlistsListEl = document.getElementById('playlists-list');
 const serverStatusEl = document.getElementById('server-status');
 
+// Auth Elements
+const loginBtn = document.getElementById('login-btn');
+const registerBtn = document.getElementById('register-btn');
+const logoutBtn = document.getElementById('logout-btn');
+const userInfoEl = document.getElementById('user-info');
+const authButtonsEl = document.getElementById('auth-buttons');
+const userWelcomeEl = document.getElementById('user-welcome');
+
 // Modals
 const addSongModal = document.getElementById('add-song-modal');
 const createPlaylistModal = document.getElementById('create-playlist-modal');
+const loginModal = document.getElementById('login-modal');
+const registerModal = document.getElementById('register-modal');
+
+// Forms
 const addSongForm = document.getElementById('add-song-form');
 const createPlaylistForm = document.getElementById('create-playlist-form');
+const loginForm = document.getElementById('login-form');
+const registerForm = document.getElementById('register-form');
+
+// Modal switches
+const switchToRegister = document.getElementById('switch-to-register');
+const switchToLogin = document.getElementById('switch-to-login');
 
 // Close buttons for modals
 const closeButtons = document.querySelectorAll('.close');
 
+// Current view state
+let currentView = 'all';
+
 // Initialize the app
 document.addEventListener('DOMContentLoaded', () => {
     checkServerStatus();
+    initializeAuth();
+    setupEventListeners();
     loadSongs();
     loadPlaylists();
-    setupEventListeners();
 });
+
+// Initialize authentication
+async function initializeAuth() {
+    if (authToken) {
+        try {
+            const profile = await makeAuthenticatedRequest('/api/auth/profile');
+            setCurrentUser(profile);
+        } catch (error) {
+            // Token is invalid, clear it
+            localStorage.removeItem('authToken');
+            authToken = null;
+            updateAuthUI();
+        }
+    } else {
+        updateAuthUI();
+    }
+}
 
 // Setup event listeners
 function setupEventListeners() {
+    // Existing listeners
     addSongBtn.addEventListener('click', () => showModal(addSongModal));
     createPlaylistBtn.addEventListener('click', () => showModal(createPlaylistModal));
     refreshBtn.addEventListener('click', refreshData);
     
+    // View filters
+    mySongsBtn.addEventListener('click', () => switchView('my-songs'));
+    myPlaylistsBtn.addEventListener('click', () => switchView('my-playlists'));
+    allContentBtn.addEventListener('click', () => switchView('all'));
+    
+    // Auth listeners
+    loginBtn.addEventListener('click', () => showModal(loginModal));
+    registerBtn.addEventListener('click', () => showModal(registerModal));
+    logoutBtn.addEventListener('click', handleLogout);
+    
+    // Modal switches
+    switchToRegister.addEventListener('click', (e) => {
+        e.preventDefault();
+        hideModal(loginModal);
+        showModal(registerModal);
+    });
+    
+    switchToLogin.addEventListener('click', (e) => {
+        e.preventDefault();
+        hideModal(registerModal);
+        showModal(loginModal);
+    });
+
+    // Form listeners
     addSongForm.addEventListener('submit', handleAddSong);
     createPlaylistForm.addEventListener('submit', handleCreatePlaylist);
-    
+    loginForm.addEventListener('submit', handleLogin);
+    registerForm.addEventListener('submit', handleRegister);
+
     closeButtons.forEach(btn => {
         btn.addEventListener('click', (e) => {
             hideModal(e.target.closest('.modal'));
         });
     });
-    
+
     // Close modal when clicking outside
     window.addEventListener('click', (e) => {
         if (e.target.classList.contains('modal')) {
             hideModal(e.target);
         }
     });
+}// Authentication functions
+function setCurrentUser(user) {
+    currentUser = user;
+    updateAuthUI();
+}
+
+function updateAuthUI() {
+    if (currentUser) {
+        userWelcomeEl.textContent = `Welcome, ${currentUser.username}!`;
+        userInfoEl.style.display = 'flex';
+        authButtonsEl.style.display = 'none';
+        
+        // Show user-specific buttons
+        mySongsBtn.style.display = 'inline-block';
+        myPlaylistsBtn.style.display = 'inline-block';
+        allContentBtn.style.display = 'inline-block';
+    } else {
+        userInfoEl.style.display = 'none';
+        authButtonsEl.style.display = 'flex';
+        
+        // Hide user-specific buttons
+        mySongsBtn.style.display = 'none';
+        myPlaylistsBtn.style.display = 'none';
+        allContentBtn.style.display = 'none';
+        
+        currentView = 'all';
+    }
+}
+
+// View switching
+function switchView(view) {
+    currentView = view;
+    
+    // Update button states
+    mySongsBtn.classList.toggle('active', view === 'my-songs');
+    myPlaylistsBtn.classList.toggle('active', view === 'my-playlists');
+    allContentBtn.classList.toggle('active', view === 'all');
+    
+    // Reload data based on view
+    loadSongs();
+    loadPlaylists();
+}
+
+// Authentication handlers
+async function handleLogin(e) {
+    e.preventDefault();
+    
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value;
+    
+    if (!username || !password) {
+        showNotification('Please fill in all fields', 'error');
+        return;
+    }
+    
+    try {
+        const response = await makeRequest('/api/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({ username, password })
+        });
+        
+        authToken = response.token;
+        localStorage.setItem('authToken', authToken);
+        setCurrentUser(response.user);
+        
+        hideModal(loginModal);
+        showNotification('Login successful!', 'success');
+        
+        // Refresh data to show user-specific content
+        loadSongs();
+        loadPlaylists();
+    } catch (error) {
+        showNotification(error.message || 'Login failed', 'error');
+    }
+}
+
+async function handleRegister(e) {
+    e.preventDefault();
+    
+    const username = document.getElementById('register-username').value.trim();
+    const email = document.getElementById('register-email').value.trim();
+    const password = document.getElementById('register-password').value;
+    const firstName = document.getElementById('register-first-name').value.trim();
+    const lastName = document.getElementById('register-last-name').value.trim();
+    
+    if (!username || !email || !password) {
+        showNotification('Please fill in required fields', 'error');
+        return;
+    }
+    
+    if (password.length < 6) {
+        showNotification('Password must be at least 6 characters long', 'error');
+        return;
+    }
+    
+    try {
+        const response = await makeRequest('/api/auth/register', {
+            method: 'POST',
+            body: JSON.stringify({
+                username,
+                email,
+                password,
+                firstName: firstName || undefined,
+                lastName: lastName || undefined
+            })
+        });
+        
+        authToken = response.token;
+        localStorage.setItem('authToken', authToken);
+        setCurrentUser(response.user);
+        
+        hideModal(registerModal);
+        showNotification('Registration successful! Welcome!', 'success');
+        
+        // Refresh data to show user-specific content
+        loadSongs();
+        loadPlaylists();
+    } catch (error) {
+        showNotification(error.message || 'Registration failed', 'error');
+    }
+}
+
+function handleLogout() {
+    authToken = null;
+    currentUser = null;
+    localStorage.removeItem('authToken');
+    updateAuthUI();
+    currentView = 'all';
+    
+    // Refresh data to show public content only
+    loadSongs();
+    loadPlaylists();
+    
+    showNotification('Logged out successfully', 'success');
 }
 
 // Modal functions
@@ -72,10 +279,60 @@ async function makeRequest(url, options = {}) {
             ...options
         });
         
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || `HTTP error! status: ${response.status}`);
+        }
+        
+        return data;
+    } catch (error) {
+        console.error('API request failed:', error);
+        throw error;
+    }
+}
+
+async function makeAuthenticatedRequest(url, options = {}) {
+    const headers = {
+        'Content-Type': 'application/json',
+        ...options.headers
+    };
+    
+    if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    
+    return makeRequest(url, {
+        ...options,
+        headers
+    });
+}
+function showModal(modal) {
+    modal.style.display = 'block';
+}
+
+function hideModal(modal) {
+    modal.style.display = 'none';
+    // Reset forms
+    const form = modal.querySelector('form');
+    if (form) form.reset();
+}
+
+// API Functions
+async function makeRequest(url, options = {}) {
+    try {
+        const response = await fetch(url, {
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            },
+            ...options
+        });
+
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        
+
         return await response.json();
     } catch (error) {
         console.error('API request failed:', error);
@@ -100,7 +357,16 @@ async function checkServerStatus() {
 async function loadSongs() {
     try {
         showLoading(songsListEl);
-        const songs = await makeRequest(`${API_BASE}/songs`);
+        
+        let endpoint = `${API_BASE}/songs`;
+        if (currentView === 'my-songs' && currentUser) {
+            endpoint = `${API_BASE}/songs/my`;
+        }
+        
+        const songs = currentUser ? 
+            await makeAuthenticatedRequest(endpoint) : 
+            await makeRequest(endpoint);
+            
         renderSongs(songs);
     } catch (error) {
         songsListEl.innerHTML = '<div class="empty-state">Failed to load songs</div>';
@@ -111,7 +377,16 @@ async function loadSongs() {
 async function loadPlaylists() {
     try {
         showLoading(playlistsListEl);
-        const playlists = await makeRequest(`${API_BASE}/playlists`);
+        
+        let endpoint = `${API_BASE}/playlists`;
+        if (currentView === 'my-playlists' && currentUser) {
+            endpoint = `${API_BASE}/playlists/my`;
+        }
+        
+        const playlists = currentUser ? 
+            await makeAuthenticatedRequest(endpoint) : 
+            await makeRequest(endpoint);
+            
         renderPlaylists(playlists);
     } catch (error) {
         playlistsListEl.innerHTML = '<div class="empty-state">Failed to load playlists</div>';
@@ -121,42 +396,57 @@ async function loadPlaylists() {
 // Render songs
 function renderSongs(songs) {
     if (songs.length === 0) {
-        songsListEl.innerHTML = '<div class="empty-state">No songs yet. Add your first song!</div>';
+        const message = currentView === 'my-songs' ? 
+            'You haven\'t added any songs yet!' : 
+            'No songs yet. Add your first song!';
+        songsListEl.innerHTML = `<div class="empty-state">${message}</div>`;
         return;
     }
     
-    songsListEl.innerHTML = songs.map(song => `
-        <div class="list-item">
-            <h4>${escapeHtml(song.title)}</h4>
-            <p><strong>Artist:</strong> ${escapeHtml(song.artist)}</p>
-            ${song.album ? `<p><strong>Album:</strong> ${escapeHtml(song.album)}</p>` : ''}
-            ${song.duration ? `<p><strong>Duration:</strong> ${formatDuration(song.duration)}</p>` : ''}
-            <p><small>Added: ${formatDate(song.created_at)}</small></p>
-        </div>
-    `).join('');
+    songsListEl.innerHTML = songs.map(song => {
+        const ownerBadge = song.is_mine ? '<span class="owner-badge">Mine</span>' : '';
+        return `
+            <div class="list-item">
+                <h4>
+                    ${escapeHtml(song.title)}
+                    ${ownerBadge}
+                </h4>
+                <p><strong>Artist:</strong> ${escapeHtml(song.artist)}</p>
+                ${song.album ? `<p><strong>Album:</strong> ${escapeHtml(song.album)}</p>` : ''}
+                ${song.duration ? `<p><strong>Duration:</strong> ${formatDuration(song.duration)}</p>` : ''}
+                <p><small>Added: ${formatDate(song.created_at)}</small></p>
+            </div>
+        `;
+    }).join('');
 }
 
 // Render playlists
 function renderPlaylists(playlists) {
     if (playlists.length === 0) {
-        playlistsListEl.innerHTML = '<div class="empty-state">No playlists yet. Create your first playlist!</div>';
+        const message = currentView === 'my-playlists' ? 
+            'You haven\'t created any playlists yet!' : 
+            'No playlists yet. Create your first playlist!';
+        playlistsListEl.innerHTML = `<div class="empty-state">${message}</div>`;
         return;
     }
     
-    playlistsListEl.innerHTML = playlists.map(playlist => `
-        <div class="list-item">
-            <h4>${escapeHtml(playlist.name)}</h4>
-            ${playlist.description ? `<p>${escapeHtml(playlist.description)}</p>` : ''}
-            <p><small>Created: ${formatDate(playlist.created_at)}</small></p>
-        </div>
-    `).join('');
-}
-
-// Handle add song form submission
+    playlistsListEl.innerHTML = playlists.map(playlist => {
+        const ownerBadge = playlist.is_mine ? '<span class="owner-badge">Mine</span>' : '';
+        return `
+            <div class="list-item">
+                <h4>
+                    ${escapeHtml(playlist.name)}
+                    ${ownerBadge}
+                </h4>
+                ${playlist.description ? `<p>${escapeHtml(playlist.description)}</p>` : ''}
+                <p><small>Created: ${formatDate(playlist.created_at)}</small></p>
+            </div>
+        `;
+    }).join('');
+}// Handle add song form submission
 async function handleAddSong(e) {
     e.preventDefault();
-    
-    const formData = new FormData(e.target);
+
     const songData = {
         title: document.getElementById('song-title').value.trim(),
         artist: document.getElementById('song-artist').value.trim(),
@@ -164,51 +454,53 @@ async function handleAddSong(e) {
         duration: document.getElementById('song-duration').value ? parseInt(document.getElementById('song-duration').value) : null,
         file_path: document.getElementById('song-file-path').value.trim() || null
     };
-    
+
     if (!songData.title || !songData.artist) {
         showNotification('Please fill in required fields', 'error');
         return;
     }
-    
+
     try {
-        await makeRequest(`${API_BASE}/songs`, {
+        const requestFunc = currentUser ? makeAuthenticatedRequest : makeRequest;
+        await requestFunc(`${API_BASE}/songs`, {
             method: 'POST',
             body: JSON.stringify(songData)
         });
-        
+
         showNotification('Song added successfully!', 'success');
         hideModal(addSongModal);
         loadSongs();
     } catch (error) {
-        console.error('Error adding song:', error);
+        showNotification(error.message || 'Error adding song', 'error');
     }
 }
 
 // Handle create playlist form submission
 async function handleCreatePlaylist(e) {
     e.preventDefault();
-    
+
     const playlistData = {
         name: document.getElementById('playlist-name').value.trim(),
         description: document.getElementById('playlist-description').value.trim() || null
     };
-    
+
     if (!playlistData.name) {
         showNotification('Please enter a playlist name', 'error');
         return;
     }
-    
+
     try {
-        await makeRequest(`${API_BASE}/playlists`, {
+        const requestFunc = currentUser ? makeAuthenticatedRequest : makeRequest;
+        await requestFunc(`${API_BASE}/playlists`, {
             method: 'POST',
             body: JSON.stringify(playlistData)
         });
-        
+
         showNotification('Playlist created successfully!', 'success');
         hideModal(createPlaylistModal);
         loadPlaylists();
     } catch (error) {
-        console.error('Error creating playlist:', error);
+        showNotification(error.message || 'Error creating playlist', 'error');
     }
 }
 
@@ -239,7 +531,7 @@ function formatDuration(seconds) {
 
 function formatDate(dateString) {
     const date = new Date(dateString);
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 function showNotification(message, type = 'info') {
@@ -258,7 +550,7 @@ function showNotification(message, type = 'info') {
         max-width: 300px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     `;
-    
+
     // Set background color based on type
     switch (type) {
         case 'success':
@@ -270,10 +562,10 @@ function showNotification(message, type = 'info') {
         default:
             notification.style.backgroundColor = '#2196F3';
     }
-    
+
     notification.textContent = message;
     document.body.appendChild(notification);
-    
+
     // Remove notification after 3 seconds
     setTimeout(() => {
         notification.style.animation = 'slideOutRight 0.3s ease';

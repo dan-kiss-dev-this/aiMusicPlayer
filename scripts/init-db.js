@@ -61,24 +61,24 @@ db.serialize(() => {
     db.run('DELETE FROM playlist_songs');
     db.run('DELETE FROM songs');
     db.run('DELETE FROM playlists');
-    
+
     // Insert sample songs
     const songStmt = db.prepare('INSERT INTO songs (title, artist, album, duration) VALUES (?, ?, ?, ?)');
     sampleSongs.forEach(song => {
         songStmt.run(song.title, song.artist, song.album, song.duration);
     });
     songStmt.finalize();
-    
+
     // Insert sample playlists
     const playlistStmt = db.prepare('INSERT INTO playlists (name, description) VALUES (?, ?)');
     samplePlaylists.forEach(playlist => {
         playlistStmt.run(playlist.name, playlist.description);
     });
     playlistStmt.finalize();
-    
+
     console.log(`✅ Added ${sampleSongs.length} sample songs`);
     console.log(`✅ Added ${samplePlaylists.length} sample playlists`);
     console.log('🎵 Database initialization complete!');
-    
+
     db.close();
 });
