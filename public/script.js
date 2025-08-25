@@ -16,6 +16,13 @@ const songsListEl = document.getElementById('songs-list');
 const playlistsListEl = document.getElementById('playlists-list');
 const serverStatusEl = document.getElementById('server-status');
 
+// Radio Player Elements
+const radioPlayer = document.getElementById('radio-player');
+const playPauseBtn = document.getElementById('play-pause-btn');
+const muteBtn = document.getElementById('mute-btn');
+const volumeSlider = document.getElementById('volume-slider');
+const radioStatus = document.getElementById('radio-status');
+
 // Auth Elements
 const loginBtn = document.getElementById('login-btn');
 const registerBtn = document.getElementById('register-btn');
@@ -50,6 +57,7 @@ let currentView = 'all';
 document.addEventListener('DOMContentLoaded', () => {
     checkServerStatus();
     initializeAuth();
+    initializeRadioPlayer();
     setupEventListeners();
     loadSongs();
     loadPlaylists();
@@ -80,33 +88,37 @@ function setupEventListeners() {
     refreshBtn.addEventListener('click', refreshData);
     
     // View filters
-    mySongsBtn.addEventListener('click', () => switchView('my-songs'));
-    myPlaylistsBtn.addEventListener('click', () => switchView('my-playlists'));
-    allContentBtn.addEventListener('click', () => switchView('all'));
+    if (mySongsBtn) mySongsBtn.addEventListener('click', () => switchView('my-songs'));
+    if (myPlaylistsBtn) myPlaylistsBtn.addEventListener('click', () => switchView('my-playlists'));
+    if (allContentBtn) allContentBtn.addEventListener('click', () => switchView('all'));
     
     // Auth listeners
-    loginBtn.addEventListener('click', () => showModal(loginModal));
-    registerBtn.addEventListener('click', () => showModal(registerModal));
-    logoutBtn.addEventListener('click', handleLogout);
+    if (loginBtn) loginBtn.addEventListener('click', () => showModal(loginModal));
+    if (registerBtn) registerBtn.addEventListener('click', () => showModal(registerModal));
+    if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
     
     // Modal switches
-    switchToRegister.addEventListener('click', (e) => {
-        e.preventDefault();
-        hideModal(loginModal);
-        showModal(registerModal);
-    });
+    if (switchToRegister) {
+        switchToRegister.addEventListener('click', (e) => {
+            e.preventDefault();
+            hideModal(loginModal);
+            showModal(registerModal);
+        });
+    }
     
-    switchToLogin.addEventListener('click', (e) => {
-        e.preventDefault();
-        hideModal(registerModal);
-        showModal(loginModal);
-    });
+    if (switchToLogin) {
+        switchToLogin.addEventListener('click', (e) => {
+            e.preventDefault();
+            hideModal(registerModal);
+            showModal(loginModal);
+        });
+    }
 
     // Form listeners
     addSongForm.addEventListener('submit', handleAddSong);
     createPlaylistForm.addEventListener('submit', handleCreatePlaylist);
-    loginForm.addEventListener('submit', handleLogin);
-    registerForm.addEventListener('submit', handleRegister);
+    if (loginForm) loginForm.addEventListener('submit', handleLogin);
+    if (registerForm) registerForm.addEventListener('submit', handleRegister);
 
     closeButtons.forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -124,6 +136,140 @@ function setupEventListeners() {
 function setCurrentUser(user) {
     currentUser = user;
     updateAuthUI();
+}
+
+// Initialize Radio Player
+function initializeRadioPlayer() {
+    // Check if HLS is supported
+    if (radioPlayer.canPlayType('application/vnd.apple.mpegurl') || radioPlayer.canPlayType('application/x-mpegurl')) {
+        radioStatus.textContent = 'Ready to play';
+    } else {
+        // Try to load HLS.js for browsers that don't support HLS natively
+        loadHLSLibrary();
+    }
+    
+    // Set initial volume
+    radioPlayer.volume = volumeSlider.value / 100;
+    
+    // Add event listeners
+    setupRadioEventListeners();
+}
+
+// Load HLS.js library for broader browser support
+function loadHLSLibrary() {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/hls.js@latest';
+    script.onload = () => {
+        if (window.Hls && window.Hls.isSupported()) {
+            const hls = new window.Hls();
+            hls.loadSource('https://d3d4yli4hf5bmh.cloudfront.net/hls/live.m3u8');
+            hls.attachMedia(radioPlayer);
+            hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+                radioStatus.textContent = 'Ready to play (HLS.js)';
+            });
+            hls.on(window.Hls.Events.ERROR, (event, data) => {
+                if (data.fatal) {
+                    radioStatus.textContent = 'Stream error';
+                    radioStatus.className = 'status error';
+                }
+            });
+        } else {
+            radioStatus.textContent = 'HLS not supported in this browser';
+            radioStatus.className = 'status error';
+            playPauseBtn.disabled = true;
+        }
+    };
+    script.onerror = () => {
+        radioStatus.textContent = 'Could not load HLS support';
+        radioStatus.className = 'status error';
+    };
+    document.head.appendChild(script);
+}
+
+// Setup radio player event listeners
+function setupRadioEventListeners() {
+    // Play/Pause button
+    playPauseBtn.addEventListener('click', togglePlayPause);
+    
+    // Mute button
+    muteBtn.addEventListener('click', toggleMute);
+    
+    // Volume slider
+    volumeSlider.addEventListener('input', (e) => {
+        radioPlayer.volume = e.target.value / 100;
+        updateMuteButton();
+    });
+    
+    // Radio player events
+    radioPlayer.addEventListener('loadstart', () => {
+        radioStatus.textContent = 'Loading stream...';
+        radioStatus.className = 'status';
+    });
+    
+    radioPlayer.addEventListener('canplay', () => {
+        radioStatus.textContent = 'Ready to play';
+        radioStatus.className = 'status';
+    });
+    
+    radioPlayer.addEventListener('playing', () => {
+        radioStatus.textContent = '🎵 Playing live stream';
+        radioStatus.className = 'status playing';
+        playPauseBtn.textContent = '⏸️ Pause';
+    });
+    
+    radioPlayer.addEventListener('pause', () => {
+        radioStatus.textContent = 'Paused';
+        radioStatus.className = 'status';
+        playPauseBtn.textContent = '▶️ Play';
+    });
+    
+    radioPlayer.addEventListener('error', (e) => {
+        radioStatus.textContent = 'Stream error - please try again';
+        radioStatus.className = 'status error';
+        playPauseBtn.textContent = '▶️ Play';
+        console.error('Radio player error:', e);
+    });
+    
+    radioPlayer.addEventListener('waiting', () => {
+        radioStatus.textContent = 'Buffering...';
+        radioStatus.className = 'status';
+    });
+}
+
+// Toggle play/pause
+function togglePlayPause() {
+    try {
+        if (radioPlayer.paused) {
+            radioPlayer.play().catch(e => {
+                console.error('Play failed:', e);
+                radioStatus.textContent = 'Play failed - please try again';
+                radioStatus.className = 'status error';
+            });
+        } else {
+            radioPlayer.pause();
+        }
+    } catch (error) {
+        console.error('Toggle play/pause error:', error);
+        radioStatus.textContent = 'Control error';
+        radioStatus.className = 'status error';
+    }
+}
+
+// Toggle mute
+function toggleMute() {
+    radioPlayer.muted = !radioPlayer.muted;
+    updateMuteButton();
+}
+
+// Update mute button text
+function updateMuteButton() {
+    if (radioPlayer.muted || radioPlayer.volume === 0) {
+        muteBtn.textContent = '🔇';
+    } else if (radioPlayer.volume < 0.5) {
+        muteBtn.textContent = '🔉';
+    } else {
+        muteBtn.textContent = '🔊';
+    }
 }
 
 function updateAuthUI() {

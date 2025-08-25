@@ -38,6 +38,31 @@
             </section>
 
             <section class="content">
+                <div class="panel radio-panel">
+                    <h2>🎙️ Live Radio</h2>
+                    <div class="radio-player">
+                        <video id="radio-player" class="audio-player" controls preload="none">
+                            <source src="https://d3d4yli4hf5bmh.cloudfront.net/hls/live.m3u8" type="application/x-mpegURL">
+                            Your browser does not support HLS streaming.
+                        </video>
+                        
+                        <div class="radio-controls">
+                            <button id="play-pause-btn" class="btn primary radio-btn">▶️ Play</button>
+                            <button id="mute-btn" class="btn radio-btn">🔊</button>
+                            <div class="volume-control">
+                                <input type="range" id="volume-slider" min="0" max="100" value="50" class="volume-slider">
+                            </div>
+                        </div>
+                        
+                        <div class="radio-info">
+                            <div class="status" id="radio-status">Ready to play</div>
+                            <div class="stream-info">
+                                <small>HLS Lossless Stream</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="panel">
                     <h2>Songs</h2>
                     <div id="songs-list" class="list">

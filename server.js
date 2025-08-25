@@ -46,7 +46,7 @@ const db = new sqlite3.Database('./database.db', (err) => {
       last_login DATETIME
     )`);
     
-    // Update songs table to include user_id
+    // Create original tables without user_id first
     db.run(`CREATE TABLE IF NOT EXISTS songs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
@@ -54,19 +54,14 @@ const db = new sqlite3.Database('./database.db', (err) => {
       album TEXT,
       duration INTEGER,
       file_path TEXT,
-      user_id INTEGER,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users (id)
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
     
-    // Update playlists table to include user_id
     db.run(`CREATE TABLE IF NOT EXISTS playlists (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       description TEXT,
-      user_id INTEGER,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users (id)
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
     
     db.run(`CREATE TABLE IF NOT EXISTS playlist_songs (
@@ -77,6 +72,35 @@ const db = new sqlite3.Database('./database.db', (err) => {
       FOREIGN KEY (song_id) REFERENCES songs (id),
       PRIMARY KEY (playlist_id, song_id)
     )`);
+    
+    // Add user_id columns if they don't exist (migration)
+    db.run(`PRAGMA table_info(songs)`, (err, rows) => {
+      if (!err) {
+        db.all(`PRAGMA table_info(songs)`, (err, columns) => {
+          if (!err) {
+            const hasUserId = columns.some(col => col.name === 'user_id');
+            if (!hasUserId) {
+              console.log('🔄 Adding user_id column to songs table...');
+              db.run(`ALTER TABLE songs ADD COLUMN user_id INTEGER REFERENCES users(id)`);
+            }
+          }
+        });
+      }
+    });
+    
+    db.run(`PRAGMA table_info(playlists)`, (err, rows) => {
+      if (!err) {
+        db.all(`PRAGMA table_info(playlists)`, (err, columns) => {
+          if (!err) {
+            const hasUserId = columns.some(col => col.name === 'user_id');
+            if (!hasUserId) {
+              console.log('🔄 Adding user_id column to playlists table...');
+              db.run(`ALTER TABLE playlists ADD COLUMN user_id INTEGER REFERENCES users(id)`);
+            }
+          }
+        });
+      }
+    });
   }
 });
 
