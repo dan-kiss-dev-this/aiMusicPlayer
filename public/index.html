@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Music Player</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <h1>🎵 AI Music Player</h1>
+        <p>Local Development Environment</p>
+    </header>
+
+    <main>
+        <div class="container">
+            <section class="controls">
+                <button id="add-song-btn" class="btn primary">Add Song</button>
+                <button id="create-playlist-btn" class="btn secondary">Create Playlist</button>
+                <button id="refresh-btn" class="btn">Refresh</button>
+            </section>
+
+            <section class="content">
+                <div class="panel">
+                    <h2>Songs</h2>
+                    <div id="songs-list" class="list">
+                        <!-- Songs will be loaded here -->
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h2>Playlists</h2>
+                    <div id="playlists-list" class="list">
+                        <!-- Playlists will be loaded here -->
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Add Song Modal -->
+    <div id="add-song-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3>Add New Song</h3>
+            <form id="add-song-form">
+                <input type="text" id="song-title" placeholder="Song Title" required>
+                <input type="text" id="song-artist" placeholder="Artist" required>
+                <input type="text" id="song-album" placeholder="Album (optional)">
+                <input type="number" id="song-duration" placeholder="Duration (seconds)">
+                <input type="text" id="song-file-path" placeholder="File Path (optional)">
+                <button type="submit" class="btn primary">Add Song</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create Playlist Modal -->
+    <div id="create-playlist-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3>Create New Playlist</h3>
+            <form id="create-playlist-form">
+                <input type="text" id="playlist-name" placeholder="Playlist Name" required>
+                <textarea id="playlist-description" placeholder="Description (optional)"></textarea>
+                <button type="submit" class="btn primary">Create Playlist</button>
+            </form>
+        </div>
+    </div>
+
+    <footer>
+        <p>Server Status: <span id="server-status">Checking...</span></p>
+        <p>Database: SQLite | Server: Express.js | Port: 3000</p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
