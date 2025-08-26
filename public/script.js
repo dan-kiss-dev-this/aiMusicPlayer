@@ -2196,7 +2196,7 @@ document.addEventListener('DOMContentLoaded', function () {
             // Start song detection
             startSongDetection();
         }
-    }, 500);
+    }, 10000);
 
     // Timeout after 10 seconds
     setTimeout(() => {
