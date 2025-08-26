@@ -99,6 +99,14 @@ document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
     loadSongs();
     loadPlaylists();
+    loadSongHistory(); // Load and display recent tracks on page load
+    setCurrentPlayingSong(); // Set the current playing song
+    
+    // Update recent tracks time display every minute
+    setInterval(() => {
+        updateRecentTracksUI();
+        updateRecentSongsWidget();
+    }, 60000); // Update every 60 seconds
 });
 
 // Initialize authentication
@@ -1612,43 +1620,43 @@ let currentSong = {
 
 let songHistory = [
     {
-        title: "Electric Dreams",
-        artist: "Neon Lights",
-        startTime: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
+        title: "Midnight Symphony",
+        artist: "Crystal Echo",
+        startTime: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
         endTime: new Date(Date.now() - 30 * 1000).toISOString(),
-        duration: 150,
+        duration: 180,
         detected: true
     },
     {
-        title: "Ocean Breeze",
-        artist: "Coastal Vibes",
-        startTime: new Date(Date.now() - 8 * 60 * 1000).toISOString(),
-        endTime: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
+        title: "Ocean Waves",
+        artist: "Coastal Dreams",
+        startTime: new Date(Date.now() - 6 * 60 * 1000).toISOString(),
+        endTime: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
+        duration: 240,
+        detected: true
+    },
+    {
+        title: "Urban Nights",
+        artist: "City Pulse",
+        startTime: new Date(Date.now() - 11 * 60 * 1000).toISOString(),
+        endTime: new Date(Date.now() - 6 * 60 * 1000).toISOString(),
         duration: 300,
         detected: true
     },
     {
-        title: "City Lights",
-        artist: "Urban Symphony",
-        startTime: new Date(Date.now() - 13 * 60 * 1000).toISOString(),
-        endTime: new Date(Date.now() - 8 * 60 * 1000).toISOString(),
-        duration: 300,
+        title: "Digital Horizons",
+        artist: "Synthwave Collective",
+        startTime: new Date(Date.now() - 16 * 60 * 1000).toISOString(),
+        endTime: new Date(Date.now() - 11 * 60 * 1000).toISOString(),
+        duration: 280,
         detected: true
     },
     {
-        title: "Midnight Hour",
-        artist: "Jazz Collective",
-        startTime: new Date(Date.now() - 18 * 60 * 1000).toISOString(),
-        endTime: new Date(Date.now() - 13 * 60 * 1000).toISOString(),
-        duration: 300,
-        detected: true
-    },
-    {
-        title: "Digital Horizon",
-        artist: "Synthwave Masters",
-        startTime: new Date(Date.now() - 23 * 60 * 1000).toISOString(),
-        endTime: new Date(Date.now() - 18 * 60 * 1000).toISOString(),
-        duration: 300,
+        title: "Aurora Borealis",
+        artist: "Nordic Soundscape",
+        startTime: new Date(Date.now() - 21 * 60 * 1000).toISOString(),
+        endTime: new Date(Date.now() - 16 * 60 * 1000).toISOString(),
+        duration: 320,
         detected: true
     }
 ];
@@ -1855,7 +1863,7 @@ async function updateCurrentSong() {
 
         // Update display
         updateNowPlayingDisplay();
-        updateRecentSongsDisplay();
+        // addToSongHistory already calls updateRecentTracksUI(), no need to call it again here
     }
 
     return currentSong;
@@ -1871,14 +1879,19 @@ function addToSongHistory(song) {
             Math.round((new Date() - new Date(song.startTime)) / 1000) : null
     };
 
+    // Add new song to the beginning of the array
     songHistory.unshift(historyEntry);
     console.log('📚 Song history length after add:', songHistory.length);
 
-    // Keep only the last 5 songs
+    // Keep only the last 5 songs (remove the oldest if we exceed the limit)
     if (songHistory.length > MAX_SONG_HISTORY) {
-        songHistory = songHistory.slice(0, MAX_SONG_HISTORY);
-        console.log('✂️ Trimmed history to', MAX_SONG_HISTORY, 'songs');
+        const removedSongs = songHistory.splice(MAX_SONG_HISTORY);
+        console.log('✂️ Removed oldest song(s):', removedSongs.map(s => `${s.artist} - ${s.title}`).join(', '));
+        console.log('📝 Current history now contains', songHistory.length, 'songs');
     }
+
+    // Display current history
+    console.log('🎵 Current recently played:', songHistory.map((s, i) => `${i+1}. ${s.artist} - ${s.title}`).join('\n'));
 
     // Save to localStorage
     try {
@@ -1887,6 +1900,127 @@ function addToSongHistory(song) {
     } catch (error) {
         console.error('❌ Failed to save song history:', error);
     }
+
+    // Update both UI components with the new recent tracks
+    updateRecentTracksUI();
+    updateRecentSongsWidget();
+    
+    // Update the current playing song display (the newest song is now "playing")
+    setCurrentPlayingSong();
+}
+
+function updateRecentTracksUI() {
+    const recentTracksContainer = document.getElementById('recent-tracks');
+    if (!recentTracksContainer) {
+        console.warn('Recent tracks container not found');
+        return;
+    }
+
+    // Clear existing content
+    recentTracksContainer.innerHTML = '';
+
+    // If no song history, show placeholder
+    if (songHistory.length === 0) {
+        recentTracksContainer.innerHTML = `
+            <div class="recent-track">
+                <div class="recent-info">
+                    <div class="recent-title">No recent tracks</div>
+                    <div class="recent-artist">Start streaming to see history</div>
+                </div>
+                <div class="recent-time">-</div>
+            </div>
+        `;
+        return;
+    }
+
+    // Display the 5 most recent songs
+    songHistory.slice(0, 5).forEach((song, index) => {
+        const timeAgo = getTimeAgo(song.endTime || song.startTime);
+        const trackElement = document.createElement('div');
+        trackElement.className = 'recent-track';
+        
+        trackElement.innerHTML = `
+            <div class="recent-info">
+                <div class="recent-title">${escapeHtml(song.title)}</div>
+                <div class="recent-artist">${escapeHtml(song.artist)}</div>
+            </div>
+            <div class="recent-time">${timeAgo}</div>
+        `;
+        
+        recentTracksContainer.appendChild(trackElement);
+    });
+
+    console.log('🎵 Updated recent tracks UI with', songHistory.length, 'songs');
+}
+
+function updateRecentSongsWidget() {
+    const recentSongsWidget = document.getElementById('recent-songs-widget');
+    if (!recentSongsWidget) {
+        console.warn('Recent songs widget not found');
+        return;
+    }
+
+    // Clear existing content
+    recentSongsWidget.innerHTML = '';
+
+    // If no song history, show placeholder
+    if (songHistory.length === 0) {
+        recentSongsWidget.innerHTML = `
+            <div class="recent-song-item">
+                <div class="recent-song-number">-</div>
+                <div class="recent-song-details">
+                    <div class="recent-song-title">No recent tracks</div>
+                    <div class="recent-song-artist">Start streaming to see history</div>
+                </div>
+                <div class="recent-song-time">-</div>
+            </div>
+        `;
+        return;
+    }
+
+    // Display the 5 most recent songs
+    songHistory.slice(0, 5).forEach((song, index) => {
+        const timeAgo = getTimeAgo(song.endTime || song.startTime);
+        const songElement = document.createElement('div');
+        songElement.className = 'recent-song-item';
+        
+        songElement.innerHTML = `
+            <div class="recent-song-number">${index + 1}</div>
+            <div class="recent-song-details">
+                <div class="recent-song-title">${escapeHtml(song.title)}</div>
+                <div class="recent-song-artist">${escapeHtml(song.artist)}</div>
+            </div>
+            <div class="recent-song-time">${timeAgo}</div>
+        `;
+        
+        recentSongsWidget.appendChild(songElement);
+    });
+
+    console.log('🎵 Updated recent songs widget with', songHistory.length, 'songs');
+}
+
+function getTimeAgo(timestamp) {
+    if (!timestamp) return '-';
+    
+    const now = new Date();
+    const time = new Date(timestamp);
+    const diffMs = now - time;
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}d ago`;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 function loadSongHistory() {
@@ -1894,10 +2028,52 @@ function loadSongHistory() {
         const saved = localStorage.getItem('radioSongHistory');
         if (saved) {
             songHistory = JSON.parse(saved);
+            console.log('📚 Loaded', songHistory.length, 'songs from localStorage');
+        } else {
+            console.log('📚 No saved history, using placeholder data with', songHistory.length, 'songs');
         }
+        
+        // Always update both UI components after loading (whether from localStorage or using placeholder data)
+        updateRecentTracksUI();
+        updateRecentSongsWidget();
+        
     } catch (error) {
         console.error('Failed to load song history:', error);
-        songHistory = [];
+        // Keep the placeholder data that was initialized with songHistory
+        console.log('📚 Using fallback placeholder data with', songHistory.length, 'songs');
+        // Still update both UI components
+        updateRecentTracksUI();
+        updateRecentSongsWidget();
+    }
+}
+
+// Set current playing song (simulate live stream with current song)
+function setCurrentPlayingSong() {
+    // Get the most recent song from history as the "currently playing" song
+    const currentSong = songHistory.length > 0 ? songHistory[0] : null;
+    
+    if (currentSong && currentTitle && currentArtist) {
+        console.log('🎵 Setting current playing song:', currentSong.title, 'by', currentSong.artist);
+        
+        currentTitle.textContent = currentSong.title;
+        currentArtist.textContent = currentSong.artist;
+        
+        if (currentAlbum) {
+            currentAlbum.textContent = currentSong.album || 'Live Radio Stream';
+        }
+        
+        // Update the page title as well
+        document.title = `${currentSong.artist} - ${currentSong.title} | Radio Calico`;
+        
+    } else {
+        // Fallback if no song history
+        console.log('🎵 No song history, using default current song');
+        
+        if (currentTitle) currentTitle.textContent = 'Radio Calico Live Stream';
+        if (currentArtist) currentArtist.textContent = 'Currently Broadcasting';
+        if (currentAlbum) currentAlbum.textContent = 'Live Radio';
+        
+        document.title = 'Radio Calico - Live Stream';
     }
 }
 
@@ -2603,5 +2779,95 @@ window.addTestSong = function (title = 'Test Song', artist = 'Test Artist') {
         detected: true
     };
     addToSongHistory(testSong);
-    updateRecentSongsDisplay();
+    // The addToSongHistory function already calls updateRecentTracksUI()
 };
+
+// Test function to demonstrate the recent songs system
+function testRecentSongsSystem() {
+    console.log('🧪 Testing Recent Songs System...');
+    console.log('📊 Initial state - Songs in history:', songHistory.length);
+
+    const testSongs = [
+        { title: "Electric Dreams", artist: "Neon Pulse", startTime: new Date(Date.now() - 30000).toISOString() },
+        { title: "Starlight Serenade", artist: "Luna Voice", startTime: new Date(Date.now() - 60000).toISOString() },
+        { title: "City Rain", artist: "Urban Echo", startTime: new Date(Date.now() - 90000).toISOString() },
+        { title: "Whispered Secrets", artist: "Velvet Moon", startTime: new Date(Date.now() - 120000).toISOString() },
+        { title: "Quantum Leap", artist: "Future Sound", startTime: new Date(Date.now() - 150000).toISOString() }
+    ];
+
+    console.log('🎶 Adding test songs one by one...');
+    testSongs.forEach((song, index) => {
+        setTimeout(() => {
+            console.log(`\n--- Adding song ${index + 1}/5 ---`);
+            addToSongHistory(song);
+            updateRecentTracksUI();
+            updateRecentSongsWidget();
+            
+            if (index === testSongs.length - 1) {
+                console.log('\n✅ Test complete! Check the Recent Songs displays.');
+                console.log('📍 Final history state:', songHistory.map((s, i) => `${i+1}. ${s.artist} - ${s.title}`));
+            }
+        }, index * 2000); // Add a song every 2 seconds
+    });
+}
+
+// Make test function available globally for console access
+window.testRecentSongsSystem = testRecentSongsSystem;
+
+// Function to manually show placeholder data (useful for testing)
+function showPlaceholderData() {
+    console.log('🎭 Showing placeholder data...');
+    console.log('📊 Current songHistory length:', songHistory.length);
+    
+    // Clear any localStorage to ensure we see placeholder data
+    localStorage.removeItem('radioSongHistory');
+    
+    // Update both UI components to show the placeholder data
+    updateRecentTracksUI();
+    updateRecentSongsWidget();
+    
+    console.log('✅ Placeholder data should now be visible!');
+    console.log('🎵 Songs in history:', songHistory.map((s, i) => `${i+1}. ${s.artist} - ${s.title}`));
+}
+
+// Make this function available globally
+window.showPlaceholderData = showPlaceholderData;
+
+// Function to clear all song history and show empty state
+function clearAllSongHistory() {
+    console.log('🧹 Clearing all song history...');
+    songHistory.length = 0; // Clear the array
+    localStorage.removeItem('radioSongHistory');
+    updateRecentTracksUI();
+    updateRecentSongsWidget();
+    console.log('✅ Song history cleared!');
+}
+
+// Make this function available globally
+window.clearAllSongHistory = clearAllSongHistory;
+
+// Function to simulate a new song being detected and played
+function simulateNewSong() {
+    const newSongs = [
+        { title: "Cosmic Journey", artist: "Space Wanderer", album: "Beyond the Stars" },
+        { title: "Morning Coffee", artist: "Café Vibes", album: "Daily Rituals" },
+        { title: "Electric Storm", artist: "Thunder Electronic", album: "Weather Patterns" },
+        { title: "Silent Waves", artist: "Ocean Meditation", album: "Peaceful Waters" },
+        { title: "City Lights", artist: "Urban Soundtrack", album: "Night Life" }
+    ];
+    
+    const randomSong = newSongs[Math.floor(Math.random() * newSongs.length)];
+    const songWithTimestamp = {
+        ...randomSong,
+        startTime: new Date().toISOString(),
+        detected: true
+    };
+    
+    console.log('🎵 Simulating new song detection:', songWithTimestamp.title, 'by', songWithTimestamp.artist);
+    addToSongHistory(songWithTimestamp);
+    
+    return songWithTimestamp;
+}
+
+// Make this function available globally
+window.simulateNewSong = simulateNewSong;

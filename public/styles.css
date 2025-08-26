@@ -430,6 +430,95 @@ main {
     gap: calc(var(--baseline) * 0.75);
 }
 
+/* Recent Songs Widget */
+.recent-songs-widget {
+    margin-top: calc(var(--baseline) * 2);
+    padding-top: calc(var(--baseline) * 1.5);
+    border-top: 2px solid rgba(31, 78, 35, 0.2);
+}
+
+.recent-songs-widget h4 {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    font-size: 1.125rem;
+    color: var(--forest-green);
+    margin-bottom: var(--baseline);
+    text-align: center;
+}
+
+.recent-songs-list {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--baseline) * 0.75);
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+.recent-song-item {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--baseline) * 0.75);
+    padding: calc(var(--baseline) * 0.75);
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: 8px;
+    border-left: 3px solid var(--teal);
+    transition: all 0.3s ease;
+}
+
+.recent-song-item:hover {
+    background: rgba(255, 255, 255, 0.9);
+    transform: translateX(2px);
+    box-shadow: 0 2px 8px rgba(31, 78, 35, 0.1);
+}
+
+.recent-song-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background: var(--teal);
+    color: var(--white);
+    border-radius: 50%;
+    font-size: 0.75rem;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.recent-song-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.recent-song-title {
+    font-weight: 600;
+    color: var(--forest-green);
+    font-size: 0.875rem;
+    line-height: 1.2;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.recent-song-artist {
+    color: var(--charcoal);
+    opacity: 0.8;
+    font-size: 0.75rem;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.recent-song-time {
+    color: var(--charcoal);
+    opacity: 0.6;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
 /* Sidebar */
 .sidebar {
     display: flex;
@@ -615,6 +704,40 @@ main {
     
     .library-tabs {
         flex-direction: column;
+    }
+
+    /* Recent Songs Widget - Mobile */
+    .recent-songs-widget {
+        margin-top: var(--baseline);
+        padding-top: var(--baseline);
+    }
+    
+    .recent-songs-list {
+        max-height: 200px;
+        gap: calc(var(--baseline) * 0.5);
+    }
+    
+    .recent-song-item {
+        padding: calc(var(--baseline) * 0.5);
+        gap: calc(var(--baseline) * 0.5);
+    }
+    
+    .recent-song-number {
+        width: 20px;
+        height: 20px;
+        font-size: 0.625rem;
+    }
+    
+    .recent-song-title {
+        font-size: 0.8rem;
+    }
+    
+    .recent-song-artist {
+        font-size: 0.7rem;
+    }
+    
+    .recent-song-time {
+        font-size: 0.7rem;
     }
 }
 
