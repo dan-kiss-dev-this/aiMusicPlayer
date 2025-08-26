@@ -551,6 +551,66 @@ footer p {
     content: "⏱️ ";
 }
 
+/* Rating System Styles */
+.track-rating {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    align-items: center;
+}
+
+.rating-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.5rem 0.75rem;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.7);
+    color: #333;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    min-width: 60px;
+    justify-content: center;
+}
+
+.rating-btn:hover {
+    background: rgba(255, 255, 255, 0.9);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.rating-btn.active {
+    border-color: #4CAF50;
+    background: rgba(76, 175, 80, 0.1);
+    color: #2E7D32;
+    font-weight: 600;
+}
+
+.rating-btn.thumbs-up.active {
+    border-color: #4CAF50;
+    background: rgba(76, 175, 80, 0.1);
+    color: #2E7D32;
+}
+
+.rating-btn.thumbs-down.active {
+    border-color: #f44336;
+    background: rgba(244, 67, 54, 0.1);
+    color: #C62828;
+}
+
+.rating-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.rating-btn:disabled:hover {
+    transform: none;
+    box-shadow: none;
+    background: rgba(255, 255, 255, 0.7);
+}
+
 .track-metadata {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));

@@ -73,6 +73,25 @@ const db = new sqlite3.Database('./database.db', (err) => {
       PRIMARY KEY (playlist_id, song_id)
     )`);
     
+    // Ratings table for thumbs up/down system
+    db.run(`CREATE TABLE IF NOT EXISTS ratings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      song_title TEXT NOT NULL,
+      song_artist TEXT NOT NULL,
+      rating INTEGER NOT NULL CHECK (rating IN (-1, 1)),
+      stream_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users (id),
+      UNIQUE(user_id, song_title, song_artist)
+    )`, (err) => {
+      if (err) {
+        console.error('Error creating ratings table:', err.message);
+      } else {
+        console.log('✅ Ratings table created/verified successfully');
+      }
+    });
+    
     // Add user_id columns if they don't exist (migration)
     db.run(`PRAGMA table_info(songs)`, (err, rows) => {
       if (!err) {
@@ -418,6 +437,149 @@ app.post('/api/playlists', optionalAuth, (req, res) => {
         return;
       }
       res.json({ id: this.lastID, message: 'Playlist created successfully' });
+    }
+  );
+});
+
+// Rating endpoints
+
+// Submit a rating (thumbs up = 1, thumbs down = -1)
+app.post('/api/ratings', authenticateToken, (req, res) => {
+  const { song_title, song_artist, rating } = req.body;
+  const user_id = req.user.userId; // Fixed: use userId instead of id
+
+  console.log('Rating submission request:', { user_id, song_title, song_artist, rating });
+  console.log('Full req.user object:', req.user);
+
+  if (!song_title || !song_artist || rating === undefined || rating === null) {
+    console.log('Missing required fields:', { song_title, song_artist, rating });
+    return res.status(400).json({ error: 'song_title, song_artist, and rating are required' });
+  }
+
+  if (rating !== 1 && rating !== -1) {
+    console.log('Invalid rating value:', rating);
+    return res.status(400).json({ error: 'rating must be 1 (thumbs up) or -1 (thumbs down)' });
+  }
+
+  // Use INSERT OR REPLACE to handle updating existing ratings
+  console.log('Attempting to insert rating into database...');
+  db.run(
+    `INSERT OR REPLACE INTO ratings (user_id, song_title, song_artist, rating, stream_timestamp) 
+     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+    [user_id, song_title, song_artist, rating],
+    function(err) {
+      if (err) {
+        console.error('Database error submitting rating:', err);
+        console.error('Error details:', {
+          message: err.message,
+          errno: err.errno,
+          code: err.code,
+          parameters: [user_id, song_title, song_artist, rating]
+        });
+        res.status(500).json({ error: 'Database error: ' + err.message });
+        return;
+      }
+      console.log('Rating submitted successfully:', this.lastID);
+      res.json({ 
+        message: 'Rating submitted successfully',
+        rating: rating === 1 ? 'thumbs_up' : 'thumbs_down'
+      });
+    }
+  );
+});
+
+// Get ratings for a specific song
+app.get('/api/ratings/:title/:artist', optionalAuth, (req, res) => {
+  const { title, artist } = req.params;
+  const user_id = req.user?.id;
+
+  db.all(
+    `SELECT 
+      COUNT(CASE WHEN rating = 1 THEN 1 END) as thumbs_up,
+      COUNT(CASE WHEN rating = -1 THEN 1 END) as thumbs_down,
+      COUNT(*) as total_ratings
+     FROM ratings 
+     WHERE song_title = ? AND song_artist = ?`,
+    [decodeURIComponent(title), decodeURIComponent(artist)],
+    (err, rows) => {
+      if (err) {
+        console.error('Error getting ratings:', err);
+        res.status(500).json({ error: err.message });
+        return;
+      }
+
+      const stats = rows[0] || { thumbs_up: 0, thumbs_down: 0, total_ratings: 0 };
+      
+      // If user is authenticated, get their rating for this song
+      if (user_id) {
+        db.get(
+          `SELECT rating FROM ratings WHERE user_id = ? AND song_title = ? AND song_artist = ?`,
+          [user_id, decodeURIComponent(title), decodeURIComponent(artist)],
+          (err, userRating) => {
+            if (err) {
+              console.error('Error getting user rating:', err);
+              res.status(500).json({ error: err.message });
+              return;
+            }
+            
+            res.json({
+              ...stats,
+              user_rating: userRating?.rating || null
+            });
+          }
+        );
+      } else {
+        res.json(stats);
+      }
+    }
+  );
+});
+
+// Get user's rating history
+app.get('/api/ratings/my', authenticateToken, (req, res) => {
+  const user_id = req.user.userId; // Fixed: use userId instead of id
+
+  db.all(
+    `SELECT song_title, song_artist, rating, stream_timestamp, created_at 
+     FROM ratings 
+     WHERE user_id = ? 
+     ORDER BY created_at DESC`,
+    [user_id],
+    (err, rows) => {
+      if (err) {
+        console.error('Error getting user ratings:', err);
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      res.json(rows);
+    }
+  );
+});
+
+// Delete a rating
+app.delete('/api/ratings', authenticateToken, (req, res) => {
+  const { song_title, song_artist } = req.body;
+  const user_id = req.user.userId; // Fixed: use userId instead of id
+
+  if (!song_title || !song_artist) {
+    return res.status(400).json({ error: 'song_title and song_artist are required' });
+  }
+
+  db.run(
+    `DELETE FROM ratings WHERE user_id = ? AND song_title = ? AND song_artist = ?`,
+    [user_id, song_title, song_artist],
+    function(err) {
+      if (err) {
+        console.error('Error deleting rating:', err);
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      
+      if (this.changes === 0) {
+        res.status(404).json({ error: 'Rating not found' });
+      } else {
+        res.json({ message: 'Rating deleted successfully' });
+      }
     }
   );
 });

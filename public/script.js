@@ -33,6 +33,13 @@ const currentQuality = document.getElementById('current-quality');
 const currentStreamType = document.getElementById('current-stream-type');
 const recentTracksList = document.getElementById('recent-tracks');
 
+// Rating Elements
+const thumbsUpBtn = document.getElementById('thumbs-up-btn');
+const thumbsDownBtn = document.getElementById('thumbs-down-btn');
+const thumbsUpCount = document.getElementById('thumbs-up-count');
+const thumbsDownCount = document.getElementById('thumbs-down-count');
+const trackRating = document.getElementById('track-rating');
+
 // Auth Elements
 const loginBtn = document.getElementById('login-btn');
 const registerBtn = document.getElementById('register-btn');
@@ -163,6 +170,15 @@ function setupEventListeners() {
             hideModal(e.target);
         }
     });
+
+    // Rating listeners
+    if (thumbsUpBtn) {
+        thumbsUpBtn.addEventListener('click', () => handleRating(1));
+    }
+    
+    if (thumbsDownBtn) {
+        thumbsDownBtn.addEventListener('click', () => handleRating(-1));
+    }
 }// Authentication functions
 function setCurrentUser(user) {
     currentUser = user;
@@ -585,6 +601,9 @@ function updateAuthUI() {
 
         currentView = 'all';
     }
+    
+    // Update rating display when auth state changes
+    updateRatingDisplay();
 }
 
 // View switching
@@ -690,8 +709,220 @@ function handleLogout() {
     // Refresh data to show public content only
     loadSongs();
     loadPlaylists();
+    
+    // Reset rating display
+    updateRatingDisplay();
 
     showNotification('Logged out successfully', 'success');
+}
+
+// Rating Functions
+async function handleRating(rating) {
+    console.log('🎵 handleRating called with rating:', rating);
+    
+    if (!currentUser) {
+        console.log('❌ No currentUser found, showing login modal');
+        showNotification('Please login to rate songs', 'error');
+        showModal(loginModal);
+        return;
+    }
+
+    // Use currentSong object instead of DOM elements for dynamic rating system
+    let songTitle, songArtist;
+    
+    console.log('🎯 Current song object:', currentSong);
+    
+    if (currentSong && currentSong.title && currentSong.artist && 
+        currentSong.title !== 'Unknown Track' && currentSong.artist !== 'Unknown Artist') {
+        // Use the current song from the song detection system
+        songTitle = currentSong.title;
+        songArtist = currentSong.artist;
+        console.log('✅ Using currentSong object:', { songTitle, songArtist });
+    } else {
+        // Fallback to DOM elements for static rating system
+        const currentTitle = document.getElementById('current-title');
+        const currentArtist = document.getElementById('current-artist');
+        
+        console.log('🔄 Falling back to DOM elements:', {
+            currentTitle: currentTitle ? currentTitle.textContent : 'null',
+            currentArtist: currentArtist ? currentArtist.textContent : 'null'
+        });
+        
+        if (!currentTitle || !currentArtist || 
+            currentTitle.textContent === 'No track playing' || 
+            currentArtist.textContent === '-') {
+            console.log('❌ No valid track info found in DOM');
+            showNotification('No track is currently playing to rate', 'error');
+            return;
+        }
+        
+        songTitle = currentTitle.textContent;
+        songArtist = currentArtist.textContent;
+        console.log('✅ Using DOM elements:', { songTitle, songArtist });
+    }
+
+    console.log('📤 Preparing to submit rating:', {
+        song_title: songTitle,
+        song_artist: songArtist,
+        rating: rating,
+        user: currentUser.username
+    });
+
+    try {
+        // Disable buttons while submitting
+        if (thumbsUpBtn) thumbsUpBtn.disabled = true;
+        if (thumbsDownBtn) thumbsDownBtn.disabled = true;
+
+        const response = await makeAuthenticatedRequest('/api/ratings', {
+            method: 'POST',
+            body: JSON.stringify({
+                song_title: songTitle,
+                song_artist: songArtist,
+                rating: rating
+            })
+        });
+
+        console.log('✅ Rating submitted successfully:', response);
+
+        const ratingText = rating === 1 ? 'thumbs up' : 'thumbs down';
+        showNotification(`Gave "${songTitle}" a ${ratingText}!`, 'success');
+        
+        // Update both static and dynamic rating displays
+        updateRatingDisplay(songTitle, songArtist);
+        updateDynamicRatingDisplay(songTitle, songArtist);
+
+    } catch (error) {
+        console.error('❌ Rating submission failed:', error);
+        showNotification('Failed to submit rating: ' + error.message, 'error');
+    } finally {
+        // Re-enable buttons
+        if (thumbsUpBtn) thumbsUpBtn.disabled = false;
+        if (thumbsDownBtn) thumbsDownBtn.disabled = false;
+    }
+}
+
+async function updateRatingDisplay(songTitle = null, songArtist = null) {
+    if (!trackRating) return;
+
+    // If no song specified, get current song
+    if (!songTitle || !songArtist) {
+        const currentTitleEl = document.getElementById('current-title');
+        const currentArtistEl = document.getElementById('current-artist');
+        
+        if (!currentTitleEl || !currentArtistEl || 
+            currentTitleEl.textContent === 'No track playing' || 
+            currentArtistEl.textContent === '-') {
+            // Hide rating section if no track is playing
+            trackRating.style.display = 'none';
+            return;
+        }
+        
+        songTitle = currentTitleEl.textContent;
+        songArtist = currentArtistEl.textContent;
+    }
+
+    // Show rating section
+    trackRating.style.display = 'flex';
+
+    try {
+        const encodedTitle = encodeURIComponent(songTitle);
+        const encodedArtist = encodeURIComponent(songArtist);
+        
+        const response = await (currentUser ? 
+            makeAuthenticatedRequest(`/api/ratings/${encodedTitle}/${encodedArtist}`) :
+            makeRequest(`/api/ratings/${encodedTitle}/${encodedArtist}`)
+        );
+
+        // Update counts
+        if (thumbsUpCount) thumbsUpCount.textContent = response.thumbs_up || 0;
+        if (thumbsDownCount) thumbsDownCount.textContent = response.thumbs_down || 0;
+
+        // Update button states based on user's rating
+        if (currentUser && response.user_rating !== undefined) {
+            if (thumbsUpBtn) {
+                thumbsUpBtn.classList.toggle('active', response.user_rating === 1);
+            }
+            if (thumbsDownBtn) {
+                thumbsDownBtn.classList.toggle('active', response.user_rating === -1);
+            }
+        } else {
+            // Clear active states if not logged in
+            if (thumbsUpBtn) thumbsUpBtn.classList.remove('active');
+            if (thumbsDownBtn) thumbsDownBtn.classList.remove('active');
+        }
+
+        // Enable/disable buttons based on login status
+        if (thumbsUpBtn) thumbsUpBtn.disabled = !currentUser;
+        if (thumbsDownBtn) thumbsDownBtn.disabled = !currentUser;
+
+    } catch (error) {
+        console.error('Error loading rating data:', error);
+        // Set default values on error
+        if (thumbsUpCount) thumbsUpCount.textContent = '0';
+        if (thumbsDownCount) thumbsDownCount.textContent = '0';
+        if (thumbsUpBtn) {
+            thumbsUpBtn.classList.remove('active');
+            thumbsUpBtn.disabled = !currentUser;
+        }
+        if (thumbsDownBtn) {
+            thumbsDownBtn.classList.remove('active');
+            thumbsDownBtn.disabled = !currentUser;
+        }
+    }
+}
+
+// Dynamic rating display for song detection system
+async function updateDynamicRatingDisplay(songTitle, songArtist) {
+    if (!songTitle || !songArtist || songTitle === 'Unknown Track' || songArtist === 'Unknown Artist') {
+        return;
+    }
+
+    try {
+        const encodedTitle = encodeURIComponent(songTitle);
+        const encodedArtist = encodeURIComponent(songArtist);
+        
+        const response = await (currentUser ? 
+            makeAuthenticatedRequest(`/api/ratings/${encodedTitle}/${encodedArtist}`) :
+            makeRequest(`/api/ratings/${encodedTitle}/${encodedArtist}`)
+        );
+
+        // Update counts in dynamic elements
+        const dynamicThumbsUpCount = document.getElementById('thumbs-up-count-dynamic');
+        const dynamicThumbsDownCount = document.getElementById('thumbs-down-count-dynamic');
+        
+        if (dynamicThumbsUpCount) dynamicThumbsUpCount.textContent = response.thumbs_up || 0;
+        if (dynamicThumbsDownCount) dynamicThumbsDownCount.textContent = response.thumbs_down || 0;
+
+        // Update button states for dynamically created buttons
+        const dynamicThumbsUpBtn = document.querySelector('.track-info .thumbs-up');
+        const dynamicThumbsDownBtn = document.querySelector('.track-info .thumbs-down');
+
+        if (currentUser && response.user_rating !== undefined) {
+            if (dynamicThumbsUpBtn) {
+                dynamicThumbsUpBtn.classList.toggle('active', response.user_rating === 1);
+            }
+            if (dynamicThumbsDownBtn) {
+                dynamicThumbsDownBtn.classList.toggle('active', response.user_rating === -1);
+            }
+        } else {
+            // Clear active states if not logged in
+            if (dynamicThumbsUpBtn) dynamicThumbsUpBtn.classList.remove('active');
+            if (dynamicThumbsDownBtn) dynamicThumbsDownBtn.classList.remove('active');
+        }
+
+        // Enable/disable buttons based on login status
+        if (dynamicThumbsUpBtn) dynamicThumbsUpBtn.disabled = !currentUser;
+        if (dynamicThumbsDownBtn) dynamicThumbsDownBtn.disabled = !currentUser;
+
+    } catch (error) {
+        console.error('Error loading dynamic rating data:', error);
+        // Set default values on error
+        const dynamicThumbsUpCount = document.getElementById('thumbs-up-count-dynamic');
+        const dynamicThumbsDownCount = document.getElementById('thumbs-down-count-dynamic');
+        
+        if (dynamicThumbsUpCount) dynamicThumbsUpCount.textContent = '0';
+        if (dynamicThumbsDownCount) dynamicThumbsDownCount.textContent = '0';
+    }
 }
 
 // Modal functions
@@ -758,6 +989,18 @@ function hideModal(modal) {
 
 // API Functions
 async function makeRequest(url, options = {}) {
+    const requestInfo = {
+        url: url,
+        method: options.method || 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+        },
+        body: options.body || null
+    };
+    
+    console.log('🌐 Making API request:', requestInfo);
+    
     try {
         const response = await fetch(url, {
             headers: {
@@ -767,13 +1010,24 @@ async function makeRequest(url, options = {}) {
             ...options
         });
 
+        console.log('📥 API response received:', {
+            url: url,
+            status: response.status,
+            statusText: response.statusText,
+            ok: response.ok
+        });
+
         if (!response.ok) {
+            const errorText = await response.text();
+            console.error('❌ API error response:', errorText);
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        return await response.json();
+        const jsonResponse = await response.json();
+        console.log('✅ API response data:', jsonResponse);
+        return jsonResponse;
     } catch (error) {
-        console.error('API request failed:', error);
+        console.error('❌ API request failed:', error);
         showNotification('Error: ' + error.message, 'error');
         throw error;
     }
@@ -1095,6 +1349,14 @@ function updateCurrentTrackDisplay(metadata) {
 
         if (currentStreamType) {
             currentStreamType.textContent = 'HLS Live Stream';
+        }
+
+        // Update rating display for current track
+        if (trackInfo.title && trackInfo.title !== 'Live Radio Stream' && 
+            trackInfo.artist && trackInfo.artist !== 'Radio Station') {
+            updateRatingDisplay(trackInfo.title, trackInfo.artist);
+        } else {
+            updateRatingDisplay(); // This will hide the rating section
         }
 
         // Add to recently played if it's a new track
@@ -1960,6 +2222,14 @@ function updateNowPlayingDisplay(metadata = {}) {
             <div class="track-info">
                 <div class="track-title">${currentSong.title}</div>
                 <div class="track-artist">${currentSong.artist}</div>
+                <div class="track-rating">
+                    <button class="rating-btn thumbs-down" onclick="handleRating(-1)" title="Thumbs Down">
+                        👎 <span id="thumbs-down-count-dynamic">0</span>
+                    </button>
+                    <button class="rating-btn thumbs-up" onclick="handleRating(1)" title="Thumbs Up">
+                        👍 <span id="thumbs-up-count-dynamic">0</span>
+                    </button>
+                </div>
             </div>
         </div>
         
@@ -2003,6 +2273,11 @@ function updateNowPlayingDisplay(metadata = {}) {
             </div>
         </div>
     `;
+    
+    // Update rating display for the current song
+    setTimeout(() => {
+        updateDynamicRatingDisplay(currentSong.title, currentSong.artist);
+    }, 100);
 }
 
 function updateRecentSongsDisplay() {
