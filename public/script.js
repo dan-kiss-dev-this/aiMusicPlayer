@@ -53,6 +53,17 @@ const closeButtons = document.querySelectorAll('.close');
 // Current view state
 let currentView = 'all';
 
+// Metadata tracking
+let currentMetadata = {
+    title: null,
+    artist: null,
+    album: null,
+    duration: null,
+    bitrate: null,
+    timestamp: null
+};
+let metadataUpdateInterval = null;
+
 // Initialize the app
 document.addEventListener('DOMContentLoaded', () => {
     checkServerStatus();
@@ -161,22 +172,50 @@ function loadHLSLibrary() {
     script.src = 'https://cdn.jsdelivr.net/npm/hls.js@latest';
     script.onload = () => {
         if (window.Hls && window.Hls.isSupported()) {
-            const hls = new window.Hls();
+            const hls = new window.Hls({
+                debug: false,
+                enableWorker: true
+            });
+            
+            // Store HLS instance globally for metadata access
+            window.hlsInstance = hls;
+            
             hls.loadSource('https://d3d4yli4hf5bmh.cloudfront.net/hls/live.m3u8');
             hls.attachMedia(radioPlayer);
+            
             hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
                 radioStatus.textContent = 'Ready to play (HLS.js)';
+                console.log('🎵 HLS manifest parsed');
+                extractHLSMetadata(hls);
             });
+            
+            hls.on(window.Hls.Events.LEVEL_SWITCHING, (event, data) => {
+                console.log(`🎵 HLS level switching to: ${data.level} (bitrate: ${hls.levels[data.level]?.bitrate})`);
+                extractHLSMetadata(hls);
+            });
+            
+            hls.on(window.Hls.Events.LEVEL_SWITCHED, (event, data) => {
+                console.log(`🎵 HLS level switched to: ${data.level} (bitrate: ${hls.levels[data.level]?.bitrate})`);
+                extractHLSMetadata(hls);
+            });
+            
+            hls.on(window.Hls.Events.FRAG_LOADED, (event, data) => {
+                // Log fragment information for detailed stream analysis
+                console.log(`🎵 Fragment loaded: ${data.frag.sn} (duration: ${data.frag.duration}s)`);
+            });
+            
             hls.on(window.Hls.Events.ERROR, (event, data) => {
+                console.error('🎵 HLS Error:', data);
                 if (data.fatal) {
                     radioStatus.textContent = 'Stream error';
                     radioStatus.className = 'status error';
+                    stopMetadataMonitoring();
                 }
             });
         } else {
             radioStatus.textContent = 'HLS not supported in this browser';
             radioStatus.className = 'status error';
-            playPauseBtn.disabled = true;
+            if (playPauseBtn) playPauseBtn.disabled = true;
         }
     };
     script.onerror = () => {
@@ -214,20 +253,61 @@ function setupRadioEventListeners() {
     radioPlayer.addEventListener('playing', () => {
         radioStatus.textContent = '🎵 Playing live stream';
         radioStatus.className = 'status playing';
-        playPauseBtn.textContent = '⏸️ Pause';
+        if (playPauseBtn) playPauseBtn.textContent = '⏸️ Pause';
+        
+        // Start metadata monitoring when playback begins
+        startMetadataMonitoring();
+        // Extract initial metadata
+        extractStreamMetadata();
     });
     
     radioPlayer.addEventListener('pause', () => {
         radioStatus.textContent = 'Paused';
         radioStatus.className = 'status';
-        playPauseBtn.textContent = '▶️ Play';
+        if (playPauseBtn) playPauseBtn.textContent = '▶️ Play';
+        
+        // Stop metadata monitoring when paused
+        stopMetadataMonitoring();
     });
     
+    radioPlayer.addEventListener('ended', () => {
+        radioStatus.textContent = 'Stream ended';
+        radioStatus.className = 'status';
+        if (playPauseBtn) playPauseBtn.textContent = '▶️ Play';
+        
+        // Stop metadata monitoring when ended
+        stopMetadataMonitoring();
+    });
+
     radioPlayer.addEventListener('error', (e) => {
         radioStatus.textContent = 'Stream error - please try again';
         radioStatus.className = 'status error';
-        playPauseBtn.textContent = '▶️ Play';
+        if (playPauseBtn) playPauseBtn.textContent = '▶️ Play';
         console.error('Radio player error:', e);
+        
+        // Stop metadata monitoring on error
+        stopMetadataMonitoring();
+    });
+    
+    // Enhanced metadata events
+    radioPlayer.addEventListener('loadedmetadata', () => {
+        console.log('🎵 Metadata loaded');
+        extractStreamMetadata();
+    });
+    
+    radioPlayer.addEventListener('durationchange', () => {
+        console.log('🎵 Duration changed');
+        extractStreamMetadata();
+    });
+    
+    radioPlayer.addEventListener('ratechange', () => {
+        console.log('🎵 Playback rate changed');
+        extractStreamMetadata();
+    });
+    
+    radioPlayer.addEventListener('volumechange', () => {
+        console.log('🎵 Volume changed');
+        if (updateMuteButton) updateMuteButton();
     });
     
     radioPlayer.addEventListener('waiting', () => {
@@ -259,6 +339,177 @@ function togglePlayPause() {
 function toggleMute() {
     radioPlayer.muted = !radioPlayer.muted;
     updateMuteButton();
+}
+
+// Metadata extraction and logging functions
+function extractStreamMetadata() {
+    try {
+        const metadata = {
+            timestamp: new Date().toISOString(),
+            currentTime: radioPlayer.currentTime,
+            duration: radioPlayer.duration || 'Live Stream',
+            buffered: getBufferedInfo(),
+            networkState: getNetworkStateText(radioPlayer.networkState),
+            readyState: getReadyStateText(radioPlayer.readyState),
+            videoWidth: radioPlayer.videoWidth || 'N/A',
+            videoHeight: radioPlayer.videoHeight || 'N/A',
+            volume: radioPlayer.volume,
+            muted: radioPlayer.muted,
+            playbackRate: radioPlayer.playbackRate,
+            paused: radioPlayer.paused,
+            seeking: radioPlayer.seeking,
+            ended: radioPlayer.ended
+        };
+
+        // Try to extract text tracks (subtitles/captions) which might contain metadata
+        if (radioPlayer.textTracks && radioPlayer.textTracks.length > 0) {
+            metadata.textTracks = Array.from(radioPlayer.textTracks).map(track => ({
+                kind: track.kind,
+                label: track.label,
+                language: track.language,
+                mode: track.mode
+            }));
+        }
+
+        // Log detailed metadata
+        console.group('🎵 Stream Metadata Update');
+        console.log('Timestamp:', metadata.timestamp);
+        console.log('Stream Info:', {
+            currentTime: metadata.currentTime,
+            duration: metadata.duration,
+            networkState: metadata.networkState,
+            readyState: metadata.readyState
+        });
+        console.log('Quality Info:', {
+            videoWidth: metadata.videoWidth,
+            videoHeight: metadata.videoHeight,
+            playbackRate: metadata.playbackRate
+        });
+        console.log('Audio Info:', {
+            volume: Math.round(metadata.volume * 100) + '%',
+            muted: metadata.muted
+        });
+        console.log('Playback State:', {
+            paused: metadata.paused,
+            seeking: metadata.seeking,
+            ended: metadata.ended
+        });
+        console.log('Buffer Info:', metadata.buffered);
+        if (metadata.textTracks) {
+            console.log('Text Tracks:', metadata.textTracks);
+        }
+        console.groupEnd();
+
+        // Update current metadata
+        currentMetadata = { ...currentMetadata, ...metadata };
+        
+        return metadata;
+    } catch (error) {
+        console.error('Error extracting metadata:', error);
+        return null;
+    }
+}
+
+function getBufferedInfo() {
+    try {
+        const buffered = radioPlayer.buffered;
+        const ranges = [];
+        for (let i = 0; i < buffered.length; i++) {
+            ranges.push({
+                start: buffered.start(i),
+                end: buffered.end(i),
+                duration: buffered.end(i) - buffered.start(i)
+            });
+        }
+        return {
+            rangeCount: buffered.length,
+            ranges: ranges,
+            totalBuffered: ranges.reduce((total, range) => total + range.duration, 0)
+        };
+    } catch (error) {
+        return { error: error.message };
+    }
+}
+
+function getNetworkStateText(state) {
+    const states = {
+        0: 'NETWORK_EMPTY',
+        1: 'NETWORK_IDLE', 
+        2: 'NETWORK_LOADING',
+        3: 'NETWORK_NO_SOURCE'
+    };
+    return states[state] || `Unknown (${state})`;
+}
+
+function getReadyStateText(state) {
+    const states = {
+        0: 'HAVE_NOTHING',
+        1: 'HAVE_METADATA',
+        2: 'HAVE_CURRENT_DATA',
+        3: 'HAVE_FUTURE_DATA',
+        4: 'HAVE_ENOUGH_DATA'
+    };
+    return states[state] || `Unknown (${state})`;
+}
+
+function startMetadataMonitoring() {
+    // Clear any existing interval
+    if (metadataUpdateInterval) {
+        clearInterval(metadataUpdateInterval);
+    }
+    
+    // Extract metadata every 10 seconds
+    metadataUpdateInterval = setInterval(() => {
+        if (!radioPlayer.paused) {
+            extractStreamMetadata();
+        }
+    }, 10000);
+    
+    console.log('🎵 Started metadata monitoring (updates every 10 seconds)');
+}
+
+function stopMetadataMonitoring() {
+    if (metadataUpdateInterval) {
+        clearInterval(metadataUpdateInterval);
+        metadataUpdateInterval = null;
+        console.log('🎵 Stopped metadata monitoring');
+    }
+}
+
+// Enhanced metadata extraction for HLS streams
+function extractHLSMetadata(hls) {
+    if (!hls) return;
+    
+    try {
+        // Get HLS-specific information
+        const hlsMetadata = {
+            timestamp: new Date().toISOString(),
+            hlsVersion: hls.constructor.version || 'Unknown',
+            loadLevel: hls.loadLevel,
+            currentLevel: hls.currentLevel,
+            autoLevelEnabled: hls.autoLevelEnabled,
+            levels: hls.levels ? hls.levels.map(level => ({
+                bitrate: level.bitrate,
+                width: level.width,
+                height: level.height,
+                codecs: level.codecs,
+                url: level.url
+            })) : []
+        };
+
+        console.group('🎥 HLS Stream Metadata');
+        console.log('HLS Version:', hlsMetadata.hlsVersion);
+        console.log('Current Level:', hlsMetadata.currentLevel);
+        console.log('Load Level:', hlsMetadata.loadLevel);
+        console.log('Auto Level:', hlsMetadata.autoLevelEnabled);
+        console.log('Available Levels:', hlsMetadata.levels);
+        console.groupEnd();
+
+        return hlsMetadata;
+    } catch (error) {
+        console.error('Error extracting HLS metadata:', error);
+        return null;
+    }
 }
 
 // Update mute button text
@@ -749,3 +1000,21 @@ style.textContent = `
     }
 `;
 document.head.appendChild(style);
+
+// Global function to manually extract metadata (useful for testing)
+window.getStreamMetadata = function() {
+    console.log('🎵 Manual metadata extraction triggered');
+    const basicMetadata = extractStreamMetadata();
+    
+    if (window.hlsInstance) {
+        const hlsMetadata = extractHLSMetadata(window.hlsInstance);
+        return { basic: basicMetadata, hls: hlsMetadata };
+    }
+    
+    return { basic: basicMetadata };
+};
+
+// Global function to get current metadata state
+window.getCurrentMetadata = function() {
+    return currentMetadata;
+};
