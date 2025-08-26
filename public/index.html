@@ -42,65 +42,99 @@
 
     <main>
         <div class="container">
-            <section class="controls">
-                <button id="add-song-btn" class="btn primary">Add Song</button>
-                <button id="create-playlist-btn" class="btn secondary">Create Playlist</button>
-                <button id="my-songs-btn" class="btn secondary" style="display: none;">My Songs</button>
-                <button id="my-playlists-btn" class="btn secondary" style="display: none;">My Playlists</button>
-                <button id="all-content-btn" class="btn secondary" style="display: none;">All Content</button>
-                <button id="refresh-btn" class="btn secondary">Refresh</button>
-            </section>
-
-            <section class="content">
-                <div class="panel radio-panel">
-                    <h2>Live Radio Stream</h2>
-                    <div class="radio-player">
-                        <video id="radio-player" class="audio-player" controls preload="none">
-                            <source src="https://d3d4yli4hf5bmh.cloudfront.net/hls/live.m3u8"
-                                type="application/x-mpegURL">
-                            Your browser does not support HLS streaming.
-                        </video>
-
-                        <div class="radio-info">
-                            <div class="status" id="radio-status">Ready to stream crystal-clear audio</div>
-                            <div class="stream-info">
-                                <small>24-bit / 48 kHz Lossless HLS Stream</small>
+            <!-- Main Content Grid -->
+            <div class="main-grid">
+                <!-- Live Radio Section -->
+                <section class="radio-section">
+                    <div class="radio-container">
+                        <h2>Live Stream</h2>
+                        <div class="radio-player">
+                            <video id="radio-player" class="audio-player" controls preload="none">
+                                <source src="https://d3d4yli4hf5bmh.cloudfront.net/hls/live.m3u8"
+                                    type="application/x-mpegURL">
+                                Your browser does not support HLS streaming.
+                            </video>
+                            
+                            <div class="stream-status">
+                                <div class="status-indicator">
+                                    <span class="live-dot"></span>
+                                    <span id="radio-status">LIVE</span>
+                                </div>
+                                <div class="stream-quality">24-bit / 48 kHz Lossless</div>
                             </div>
                         </div>
                     </div>
+                </section>
 
-                    <!-- Now Playing Widget -->
-                    <div class="now-playing">
+                <!-- Now Playing Widget -->
+                <section class="now-playing-section">
+                    <div class="now-playing-card">
                         <h3>Now Playing</h3>
-                        <div class="track-info">
-                            <img src="https://d3d4yli4hf5bmh.cloudfront.net/cover.jpg" 
-                                 alt="Album Art" class="album-art" id="album-art">
-                            <div class="track-details">
-                                <h4 id="current-title">No track playing</h4>
-                                <p id="current-artist">-</p>
-                                <div class="additional-info">
-                                    <span id="current-album">-</span>
-                                    <span id="current-duration">-</span>
+                        <div class="track-display">
+                            <div class="album-art-container">
+                                <img src="https://d3d4yli4hf5bmh.cloudfront.net/cover.jpg" 
+                                     alt="Album Art" class="album-art" id="album-art">
+                            </div>
+                            <div class="track-info">
+                                <h4 id="current-title" class="track-title">No track playing</h4>
+                                <p id="current-artist" class="track-artist">-</p>
+                                <div class="track-meta">
+                                    <span id="current-album" class="album-name">-</span>
                                 </div>
                             </div>
                         </div>
                         
-                        <div class="rating-section">
-                            <div class="rating-buttons">
-                                <button class="rating-btn thumbs-down" onclick="handleRating(-1)" title="Thumbs Down">
-                                    👎 <span class="rating-count" id="thumbs-down-count">0</span>
-                                </button>
-                                <button class="rating-btn thumbs-up" onclick="handleRating(1)" title="Thumbs Up">
-                                    👍 <span class="rating-count" id="thumbs-up-count">0</span>
-                                </button>
-                            </div>
+                        <div class="rating-controls">
+                            <button class="rating-btn thumbs-down" onclick="handleRating(-1)" title="Thumbs Down">
+                                👎 <span class="rating-count" id="thumbs-down-count">0</span>
+                            </button>
+                            <button class="rating-btn thumbs-up" onclick="handleRating(1)" title="Thumbs Up">
+                                👍 <span class="rating-count" id="thumbs-up-count">0</span>
+                            </button>
                         </div>
                     </div>
-                </div>
+                </section>
 
-                <div class="panel songs-panel">
-                    <h2>Music Library</h2>
-                    <div class="songs-content">
+                <!-- Sidebar Content -->
+                <aside class="sidebar">
+                    <!-- User Controls -->
+                    <section class="user-controls">
+                        <div class="controls-grid">
+                            <button id="add-song-btn" class="btn primary">Add Song</button>
+                            <button id="create-playlist-btn" class="btn secondary">Create Playlist</button>
+                            <button id="my-songs-btn" class="btn secondary" style="display: none;">My Songs</button>
+                            <button id="my-playlists-btn" class="btn secondary" style="display: none;">My Playlists</button>
+                            <button id="all-content-btn" class="btn secondary" style="display: none;">All Content</button>
+                            <button id="refresh-btn" class="btn secondary">Refresh</button>
+                        </div>
+                    </section>
+
+                    <!-- Recently Played -->
+                    <section class="recent-section">
+                        <h3>Recently Played</h3>
+                        <div class="recent-tracks" id="recent-tracks">
+                            <div class="recent-track">
+                                <div class="recent-info">
+                                    <div class="recent-title">No recent tracks</div>
+                                    <div class="recent-artist">Start streaming to see history</div>
+                                </div>
+                                <div class="recent-time">-</div>
+                            </div>
+                        </div>
+                    </section>
+                </aside>
+            </div>
+
+            <!-- Music Library Section -->
+            <section class="library-section">
+                <div class="library-tabs">
+                    <button class="tab-btn active" data-tab="songs">Songs</button>
+                    <button class="tab-btn" data-tab="playlists">Playlists</button>
+                </div>
+                
+                <div class="tab-content">
+                    <div id="songs-tab" class="tab-panel active">
+                        <h3>Music Library</h3>
                         <div class="loading" id="songs-loading" style="display: none;">
                             Loading your music library...
                         </div>
@@ -108,31 +142,15 @@
                             <!-- Songs will be populated here -->
                         </ul>
                     </div>
-                </div>
-
-                <div class="panel playlists-panel">
-                    <h2>Playlists</h2>
-                    <div class="playlists-content">
+                    
+                    <div id="playlists-tab" class="tab-panel">
+                        <h3>Playlists</h3>
                         <div class="loading" id="playlists-loading" style="display: none;">
                             Loading playlists...
                         </div>
                         <ul class="playlists-list" id="playlists-list">
                             <!-- Playlists will be populated here -->
                         </ul>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Recently Played Section -->
-            <section class="recently-played-section">
-                <h2>Recently Played</h2>
-                <div class="recent-tracks-grid" id="recent-tracks">
-                    <div class="recent-track-item">
-                        <div class="recent-track-info">
-                            <div class="recent-title">No recent tracks</div>
-                            <div class="recent-artist">Start streaming to see your listening history</div>
-                        </div>
-                        <div class="recent-time">-</div>
                     </div>
                 </div>
             </section>

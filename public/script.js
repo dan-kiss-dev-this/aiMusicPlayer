@@ -179,7 +179,35 @@ function setupEventListeners() {
     if (thumbsDownBtn) {
         thumbsDownBtn.addEventListener('click', () => handleRating(-1));
     }
-}// Authentication functions
+
+    // Initialize tab functionality
+    initializeTabs();
+}
+
+// Tab functionality
+function initializeTabs() {
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    const tabPanels = document.querySelectorAll('.tab-panel');
+
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const targetTab = button.getAttribute('data-tab');
+            
+            // Remove active class from all buttons and panels
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            tabPanels.forEach(panel => panel.classList.remove('active'));
+            
+            // Add active class to clicked button and corresponding panel
+            button.classList.add('active');
+            const targetPanel = document.getElementById(targetTab + '-tab');
+            if (targetPanel) {
+                targetPanel.classList.add('active');
+            }
+        });
+    });
+}
+
+// Authentication functions
 function setCurrentUser(user) {
     currentUser = user;
     updateAuthUI();
