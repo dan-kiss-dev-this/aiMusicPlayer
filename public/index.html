@@ -4,26 +4,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Music Player</title>
+    <title>Radio Calico - AI Music Player</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
 </head>
 
 <body>
     <header>
-        <div class="header-content">
-            <div class="header-left">
-                <h1>🎵 AI Music Player</h1>
-                <p>Local Development Environment</p>
+        <nav class="nav-bar">
+            <div class="nav-content">
+                <div class="logo-section">
+                    <img src="RadioCalicoLogoTM.png" alt="Radio Calico" class="logo">
+                    <span class="brand-name">Radio Calico</span>
+                </div>
+                <div class="nav-links">
+                    <div id="user-info" class="user-info" style="display: none;">
+                        <span id="user-welcome"></span>
+                        <button id="logout-btn" class="btn logout">Logout</button>
+                    </div>
+                    <div id="auth-buttons" class="auth-buttons">
+                        <button id="login-btn" class="btn primary">Login</button>
+                        <button id="register-btn" class="btn secondary">Register</button>
+                    </div>
+                </div>
             </div>
-            <div class="header-right">
-                <div id="user-info" class="user-info" style="display: none;">
-                    <span id="user-welcome"></span>
-                    <button id="logout-btn" class="btn logout">Logout</button>
-                </div>
-                <div id="auth-buttons" class="auth-buttons">
-                    <button id="login-btn" class="btn primary">Login</button>
-                    <button id="register-btn" class="btn secondary">Register</button>
-                </div>
+        </nav>
+        <div class="hero-section">
+            <div class="hero-content">
+                <h1>Crystal-Clear Audio Experience</h1>
+                <p>24-bit / 48 kHz lossless streaming • Ad-free • Subscription-free</p>
+                <button class="btn hero-cta">Listen Now</button>
             </div>
         </div>
     </header>
@@ -33,15 +45,15 @@
             <section class="controls">
                 <button id="add-song-btn" class="btn primary">Add Song</button>
                 <button id="create-playlist-btn" class="btn secondary">Create Playlist</button>
-                <button id="my-songs-btn" class="btn" style="display: none;">My Songs</button>
-                <button id="my-playlists-btn" class="btn" style="display: none;">My Playlists</button>
-                <button id="all-content-btn" class="btn" style="display: none;">All Content</button>
-                <button id="refresh-btn" class="btn">Refresh</button>
+                <button id="my-songs-btn" class="btn secondary" style="display: none;">My Songs</button>
+                <button id="my-playlists-btn" class="btn secondary" style="display: none;">My Playlists</button>
+                <button id="all-content-btn" class="btn secondary" style="display: none;">All Content</button>
+                <button id="refresh-btn" class="btn secondary">Refresh</button>
             </section>
 
             <section class="content">
                 <div class="panel radio-panel">
-                    <h2>🎙️ Live Radio</h2>
+                    <h2>Live Radio Stream</h2>
                     <div class="radio-player">
                         <video id="radio-player" class="audio-player" controls preload="none">
                             <source src="https://d3d4yli4hf5bmh.cloudfront.net/hls/live.m3u8"
@@ -50,74 +62,94 @@
                         </video>
 
                         <div class="radio-info">
-                            <div class="status" id="radio-status">Ready to play</div>
+                            <div class="status" id="radio-status">Ready to stream crystal-clear audio</div>
                             <div class="stream-info">
-                                <small>HLS Lossless Stream</small>
+                                <small>24-bit / 48 kHz Lossless HLS Stream</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Now Playing Widget -->
+                    <div class="now-playing">
+                        <h3>Now Playing</h3>
+                        <div class="track-info">
+                            <img src="https://d3d4yli4hf5bmh.cloudfront.net/cover.jpg" 
+                                 alt="Album Art" class="album-art" id="album-art">
+                            <div class="track-details">
+                                <h4 id="current-title">No track playing</h4>
+                                <p id="current-artist">-</p>
+                                <div class="additional-info">
+                                    <span id="current-album">-</span>
+                                    <span id="current-duration">-</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="rating-section">
+                            <div class="rating-buttons">
+                                <button class="rating-btn thumbs-down" onclick="handleRating(-1)" title="Thumbs Down">
+                                    👎 <span class="rating-count" id="thumbs-down-count">0</span>
+                                </button>
+                                <button class="rating-btn thumbs-up" onclick="handleRating(1)" title="Thumbs Up">
+                                    👍 <span class="rating-count" id="thumbs-up-count">0</span>
+                                </button>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="panel metadata-panel">
-                    <h2>🎵 Now Playing</h2>
-                    <div class="now-playing-widget">
-                        <div class="current-track" id="current-track">
-                            <div class="track-info">
-                                <div class="track-title" id="current-title">No track playing</div>
-                                <div class="track-artist" id="current-artist">-</div>
-                                <div class="track-details">
-                                    <span class="track-album" id="current-album">-</span>
-                                    <span class="track-duration" id="current-duration">-</span>
-                                </div>
-
-                            </div>
-                            <div class="track-metadata">
-                                <div class="metadata-item">
-                                    <span class="label">Bitrate:</span>
-                                    <span class="value" id="current-bitrate">-</span>
-                                </div>
-                                <div class="metadata-item">
-                                    <span class="label">Quality:</span>
-                                    <span class="value" id="current-quality">-</span>
-                                </div>
-                                <div class="metadata-item">
-                                    <span class="label">Stream:</span>
-                                    <span class="value" id="current-stream-type">HLS Live</span>
-                                </div>
-                            </div>
+                <div class="panel songs-panel">
+                    <h2>Music Library</h2>
+                    <div class="songs-content">
+                        <div class="loading" id="songs-loading" style="display: none;">
+                            Loading your music library...
                         </div>
-
-                        <div class="recently-played" id="recently-played">
-                            <h3>Recently Played</h3>
-                            <div class="recent-tracks-list" id="recent-tracks">
-                                <div class="recent-track-item">
-                                    <div class="recent-track-info">
-                                        <div class="recent-title">No recent tracks</div>
-                                        <div class="recent-artist">Start playing to see history</div>
-                                    </div>
-                                    <div class="recent-time">-</div>
-                                </div>
-                            </div>
-                        </div>
+                        <ul class="songs-list" id="songs-list">
+                            <!-- Songs will be populated here -->
+                        </ul>
                     </div>
                 </div>
 
-                <div class="panel">
-                    <h2>Songs</h2>
-                    <div id="songs-list" class="list">
-                        <!-- Songs will be loaded here -->
-                    </div>
-                </div>
-
-                <div class="panel">
+                <div class="panel playlists-panel">
                     <h2>Playlists</h2>
-                    <div id="playlists-list" class="list">
-                        <!-- Playlists will be loaded here -->
+                    <div class="playlists-content">
+                        <div class="loading" id="playlists-loading" style="display: none;">
+                            Loading playlists...
+                        </div>
+                        <ul class="playlists-list" id="playlists-list">
+                            <!-- Playlists will be populated here -->
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Recently Played Section -->
+            <section class="recently-played-section">
+                <h2>Recently Played</h2>
+                <div class="recent-tracks-grid" id="recent-tracks">
+                    <div class="recent-track-item">
+                        <div class="recent-track-info">
+                            <div class="recent-title">No recent tracks</div>
+                            <div class="recent-artist">Start streaming to see your listening history</div>
+                        </div>
+                        <div class="recent-time">-</div>
                     </div>
                 </div>
             </section>
         </div>
     </main>
+
+    <footer>
+        <div class="footer-content">
+            <p>Radio Calico • Crystal-clear audio streaming • Ad-free experience</p>
+            <div class="footer-links">
+                <a href="#about">About</a>
+                <a href="#contact">Contact</a>
+                <a href="#privacy">Privacy</a>
+                <a href="#terms">Terms</a>
+            </div>
+        </div>
+    </footer>
 
     <!-- Add Song Modal -->
     <div id="add-song-modal" class="modal">
@@ -125,11 +157,26 @@
             <span class="close">&times;</span>
             <h3>Add New Song</h3>
             <form id="add-song-form">
-                <input type="text" id="song-title" placeholder="Song Title" required>
-                <input type="text" id="song-artist" placeholder="Artist" required>
-                <input type="text" id="song-album" placeholder="Album (optional)">
-                <input type="number" id="song-duration" placeholder="Duration (seconds)">
-                <input type="text" id="song-file-path" placeholder="File Path (optional)">
+                <div class="form-group">
+                    <label for="song-title">Song Title</label>
+                    <input type="text" id="song-title" required>
+                </div>
+                <div class="form-group">
+                    <label for="song-artist">Artist</label>
+                    <input type="text" id="song-artist" required>
+                </div>
+                <div class="form-group">
+                    <label for="song-album">Album (optional)</label>
+                    <input type="text" id="song-album">
+                </div>
+                <div class="form-group">
+                    <label for="song-duration">Duration (seconds)</label>
+                    <input type="number" id="song-duration">
+                </div>
+                <div class="form-group">
+                    <label for="song-file-path">File Path (optional)</label>
+                    <input type="text" id="song-file-path">
+                </div>
                 <button type="submit" class="btn primary">Add Song</button>
             </form>
         </div>
@@ -141,8 +188,14 @@
             <span class="close">&times;</span>
             <h3>Create New Playlist</h3>
             <form id="create-playlist-form">
-                <input type="text" id="playlist-name" placeholder="Playlist Name" required>
-                <textarea id="playlist-description" placeholder="Description (optional)"></textarea>
+                <div class="form-group">
+                    <label for="playlist-name">Playlist Name</label>
+                    <input type="text" id="playlist-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="playlist-description">Description (optional)</label>
+                    <textarea id="playlist-description"></textarea>
+                </div>
                 <button type="submit" class="btn primary">Create Playlist</button>
             </form>
         </div>
@@ -154,8 +207,14 @@
             <span class="close">&times;</span>
             <h3>Login to Your Account</h3>
             <form id="login-form">
-                <input type="text" id="login-username" placeholder="Username or Email" required>
-                <input type="password" id="login-password" placeholder="Password" required>
+                <div class="form-group">
+                    <label for="login-username">Username or Email</label>
+                    <input type="text" id="login-username" required>
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Password</label>
+                    <input type="password" id="login-password" required>
+                </div>
                 <button type="submit" class="btn primary">Login</button>
             </form>
             <p class="modal-footer">
@@ -170,12 +229,26 @@
             <span class="close">&times;</span>
             <h3>Create New Account</h3>
             <form id="register-form">
-                <input type="text" id="register-username" placeholder="Username" required>
-                <input type="email" id="register-email" placeholder="Email" required>
-                <input type="password" id="register-password" placeholder="Password (min 6 characters)" required
-                    minlength="6">
-                <input type="text" id="register-first-name" placeholder="First Name (optional)">
-                <input type="text" id="register-last-name" placeholder="Last Name (optional)">
+                <div class="form-group">
+                    <label for="register-username">Username</label>
+                    <input type="text" id="register-username" required>
+                </div>
+                <div class="form-group">
+                    <label for="register-email">Email</label>
+                    <input type="email" id="register-email" required>
+                </div>
+                <div class="form-group">
+                    <label for="register-password">Password (min 6 characters)</label>
+                    <input type="password" id="register-password" required minlength="6">
+                </div>
+                <div class="form-group">
+                    <label for="register-first-name">First Name (optional)</label>
+                    <input type="text" id="register-first-name">
+                </div>
+                <div class="form-group">
+                    <label for="register-last-name">Last Name (optional)</label>
+                    <input type="text" id="register-last-name">
+                </div>
                 <button type="submit" class="btn primary">Register</button>
             </form>
             <p class="modal-footer">
@@ -189,6 +262,8 @@
         <p>Database: SQLite | Server: Express.js | Port: 3000</p>
     </footer>
 
+    <!-- JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script src="script.js"></script>
 </body>
 
