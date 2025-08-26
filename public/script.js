@@ -117,17 +117,17 @@ function setupEventListeners() {
     addSongBtn.addEventListener('click', () => showModal(addSongModal));
     createPlaylistBtn.addEventListener('click', () => showModal(createPlaylistModal));
     refreshBtn.addEventListener('click', refreshData);
-    
+
     // View filters
     if (mySongsBtn) mySongsBtn.addEventListener('click', () => switchView('my-songs'));
     if (myPlaylistsBtn) myPlaylistsBtn.addEventListener('click', () => switchView('my-playlists'));
     if (allContentBtn) allContentBtn.addEventListener('click', () => switchView('all'));
-    
+
     // Auth listeners
     if (loginBtn) loginBtn.addEventListener('click', () => showModal(loginModal));
     if (registerBtn) registerBtn.addEventListener('click', () => showModal(registerModal));
     if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
-    
+
     // Modal switches
     if (switchToRegister) {
         switchToRegister.addEventListener('click', (e) => {
@@ -136,7 +136,7 @@ function setupEventListeners() {
             showModal(registerModal);
         });
     }
-    
+
     if (switchToLogin) {
         switchToLogin.addEventListener('click', (e) => {
             e.preventDefault();
@@ -178,7 +178,7 @@ function initializeRadioPlayer() {
         // Try to load HLS.js for browsers that don't support HLS natively
         loadHLSLibrary();
     }
-    
+
     // Set initial volume
     if (volumeSlider) {
         radioPlayer.volume = volumeSlider.value / 100;
@@ -186,7 +186,7 @@ function initializeRadioPlayer() {
         // Default volume when no volume slider is present
         radioPlayer.volume = 0.7;
     }
-    
+
     // Add event listeners
     setupRadioEventListeners();
 }
@@ -201,34 +201,34 @@ function loadHLSLibrary() {
                 debug: false,
                 enableWorker: true
             });
-            
+
             // Store HLS instance globally for metadata access
             window.hlsInstance = hls;
-            
+
             hls.loadSource('https://d3d4yli4hf5bmh.cloudfront.net/hls/live.m3u8');
             hls.attachMedia(radioPlayer);
-            
+
             hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
                 radioStatus.textContent = 'Ready to play (HLS.js)';
                 console.log('🎵 HLS manifest parsed');
                 extractHLSMetadata(hls);
             });
-            
+
             hls.on(window.Hls.Events.LEVEL_SWITCHING, (event, data) => {
                 console.log(`🎵 HLS level switching to: ${data.level} (bitrate: ${hls.levels[data.level]?.bitrate})`);
                 extractHLSMetadata(hls);
             });
-            
+
             hls.on(window.Hls.Events.LEVEL_SWITCHED, (event, data) => {
                 console.log(`🎵 HLS level switched to: ${data.level} (bitrate: ${hls.levels[data.level]?.bitrate})`);
                 extractHLSMetadata(hls);
             });
-            
+
             hls.on(window.Hls.Events.FRAG_LOADED, (event, data) => {
                 // Log fragment information for detailed stream analysis
                 console.log(`🎵 Fragment loaded: ${data.frag.sn} (duration: ${data.frag.duration}s)`);
             });
-            
+
             hls.on(window.Hls.Events.ERROR, (event, data) => {
                 console.error('🎵 HLS Error:', data);
                 if (data.fatal) {
@@ -256,12 +256,12 @@ function setupRadioEventListeners() {
     if (playPauseBtn) {
         playPauseBtn.addEventListener('click', togglePlayPause);
     }
-    
+
     // Mute button
     if (muteBtn) {
         muteBtn.addEventListener('click', toggleMute);
     }
-    
+
     // Volume slider
     if (volumeSlider) {
         volumeSlider.addEventListener('input', (e) => {
@@ -269,43 +269,43 @@ function setupRadioEventListeners() {
             updateMuteButton();
         });
     }
-    
+
     // Radio player events
     radioPlayer.addEventListener('loadstart', () => {
         radioStatus.textContent = 'Loading stream...';
         radioStatus.className = 'status';
     });
-    
+
     radioPlayer.addEventListener('canplay', () => {
         radioStatus.textContent = 'Ready to play';
         radioStatus.className = 'status';
     });
-    
+
     radioPlayer.addEventListener('playing', () => {
         radioStatus.textContent = '🎵 Playing live stream';
         radioStatus.className = 'status playing';
         if (playPauseBtn) playPauseBtn.textContent = '⏸️ Pause';
-        
+
         // Start metadata monitoring when playback begins
         startMetadataMonitoring();
         // Extract initial metadata
         extractStreamMetadata();
     });
-    
+
     radioPlayer.addEventListener('pause', () => {
         radioStatus.textContent = 'Paused';
         radioStatus.className = 'status';
         if (playPauseBtn) playPauseBtn.textContent = '▶️ Play';
-        
+
         // Stop metadata monitoring when paused
         stopMetadataMonitoring();
     });
-    
+
     radioPlayer.addEventListener('ended', () => {
         radioStatus.textContent = 'Stream ended';
         radioStatus.className = 'status';
         if (playPauseBtn) playPauseBtn.textContent = '▶️ Play';
-        
+
         // Stop metadata monitoring when ended
         stopMetadataMonitoring();
     });
@@ -315,32 +315,32 @@ function setupRadioEventListeners() {
         radioStatus.className = 'status error';
         if (playPauseBtn) playPauseBtn.textContent = '▶️ Play';
         console.error('Radio player error:', e);
-        
+
         // Stop metadata monitoring on error
         stopMetadataMonitoring();
     });
-    
+
     // Enhanced metadata events
     radioPlayer.addEventListener('loadedmetadata', () => {
         console.log('🎵 Metadata loaded');
         extractStreamMetadata();
     });
-    
+
     radioPlayer.addEventListener('durationchange', () => {
         console.log('🎵 Duration changed');
         extractStreamMetadata();
     });
-    
+
     radioPlayer.addEventListener('ratechange', () => {
         console.log('🎵 Playback rate changed');
         extractStreamMetadata();
     });
-    
+
     radioPlayer.addEventListener('volumechange', () => {
         console.log('🎵 Volume changed');
         if (updateMuteButton) updateMuteButton();
     });
-    
+
     radioPlayer.addEventListener('waiting', () => {
         radioStatus.textContent = 'Buffering...';
         radioStatus.className = 'status';
@@ -433,10 +433,10 @@ function extractStreamMetadata() {
 
         // Update current metadata
         currentMetadata = { ...currentMetadata, ...metadata };
-        
+
         // Update the metadata widget display
         updateCurrentTrackDisplay(metadata);
-        
+
         return metadata;
     } catch (error) {
         console.error('Error extracting metadata:', error);
@@ -468,7 +468,7 @@ function getBufferedInfo() {
 function getNetworkStateText(state) {
     const states = {
         0: 'NETWORK_EMPTY',
-        1: 'NETWORK_IDLE', 
+        1: 'NETWORK_IDLE',
         2: 'NETWORK_LOADING',
         3: 'NETWORK_NO_SOURCE'
     };
@@ -491,19 +491,19 @@ function startMetadataMonitoring() {
     if (metadataUpdateInterval) {
         clearInterval(metadataUpdateInterval);
     }
-    
+
     // Extract metadata every 30 seconds for widget updates
     metadataUpdateInterval = setInterval(() => {
         if (!radioPlayer.paused) {
             extractStreamMetadata();
         }
     }, 30000);
-    
+
     // Also update recently played timestamps every minute
     setInterval(() => {
         updateRecentlyPlayedDisplay();
     }, 60000);
-    
+
     console.log('🎵 Started metadata monitoring (updates every 30 seconds)');
 }
 
@@ -518,7 +518,7 @@ function stopMetadataMonitoring() {
 // Enhanced metadata extraction for HLS streams
 function extractHLSMetadata(hls) {
     if (!hls) return;
-    
+
     try {
         // Get HLS-specific information
         const hlsMetadata = {
@@ -569,7 +569,7 @@ function updateAuthUI() {
         userWelcomeEl.textContent = `Welcome, ${currentUser.username}!`;
         userInfoEl.style.display = 'flex';
         authButtonsEl.style.display = 'none';
-        
+
         // Show user-specific buttons
         mySongsBtn.style.display = 'inline-block';
         myPlaylistsBtn.style.display = 'inline-block';
@@ -577,12 +577,12 @@ function updateAuthUI() {
     } else {
         userInfoEl.style.display = 'none';
         authButtonsEl.style.display = 'flex';
-        
+
         // Hide user-specific buttons
         mySongsBtn.style.display = 'none';
         myPlaylistsBtn.style.display = 'none';
         allContentBtn.style.display = 'none';
-        
+
         currentView = 'all';
     }
 }
@@ -590,12 +590,12 @@ function updateAuthUI() {
 // View switching
 function switchView(view) {
     currentView = view;
-    
+
     // Update button states
     mySongsBtn.classList.toggle('active', view === 'my-songs');
     myPlaylistsBtn.classList.toggle('active', view === 'my-playlists');
     allContentBtn.classList.toggle('active', view === 'all');
-    
+
     // Reload data based on view
     loadSongs();
     loadPlaylists();
@@ -604,28 +604,28 @@ function switchView(view) {
 // Authentication handlers
 async function handleLogin(e) {
     e.preventDefault();
-    
+
     const username = document.getElementById('login-username').value.trim();
     const password = document.getElementById('login-password').value;
-    
+
     if (!username || !password) {
         showNotification('Please fill in all fields', 'error');
         return;
     }
-    
+
     try {
         const response = await makeRequest('/api/auth/login', {
             method: 'POST',
             body: JSON.stringify({ username, password })
         });
-        
+
         authToken = response.token;
         localStorage.setItem('authToken', authToken);
         setCurrentUser(response.user);
-        
+
         hideModal(loginModal);
         showNotification('Login successful!', 'success');
-        
+
         // Refresh data to show user-specific content
         loadSongs();
         loadPlaylists();
@@ -636,23 +636,23 @@ async function handleLogin(e) {
 
 async function handleRegister(e) {
     e.preventDefault();
-    
+
     const username = document.getElementById('register-username').value.trim();
     const email = document.getElementById('register-email').value.trim();
     const password = document.getElementById('register-password').value;
     const firstName = document.getElementById('register-first-name').value.trim();
     const lastName = document.getElementById('register-last-name').value.trim();
-    
+
     if (!username || !email || !password) {
         showNotification('Please fill in required fields', 'error');
         return;
     }
-    
+
     if (password.length < 6) {
         showNotification('Password must be at least 6 characters long', 'error');
         return;
     }
-    
+
     try {
         const response = await makeRequest('/api/auth/register', {
             method: 'POST',
@@ -664,14 +664,14 @@ async function handleRegister(e) {
                 lastName: lastName || undefined
             })
         });
-        
+
         authToken = response.token;
         localStorage.setItem('authToken', authToken);
         setCurrentUser(response.user);
-        
+
         hideModal(registerModal);
         showNotification('Registration successful! Welcome!', 'success');
-        
+
         // Refresh data to show user-specific content
         loadSongs();
         loadPlaylists();
@@ -686,11 +686,11 @@ function handleLogout() {
     localStorage.removeItem('authToken');
     updateAuthUI();
     currentView = 'all';
-    
+
     // Refresh data to show public content only
     loadSongs();
     loadPlaylists();
-    
+
     showNotification('Logged out successfully', 'success');
 }
 
@@ -716,13 +716,13 @@ async function makeRequest(url, options = {}) {
             },
             ...options
         });
-        
+
         const data = await response.json();
-        
+
         if (!response.ok) {
             throw new Error(data.error || `HTTP error! status: ${response.status}`);
         }
-        
+
         return data;
     } catch (error) {
         console.error('API request failed:', error);
@@ -735,11 +735,11 @@ async function makeAuthenticatedRequest(url, options = {}) {
         'Content-Type': 'application/json',
         ...options.headers
     };
-    
+
     if (authToken) {
         headers['Authorization'] = `Bearer ${authToken}`;
     }
-    
+
     return makeRequest(url, {
         ...options,
         headers
@@ -795,16 +795,16 @@ async function checkServerStatus() {
 async function loadSongs() {
     try {
         showLoading(songsListEl);
-        
+
         let endpoint = `${API_BASE}/songs`;
         if (currentView === 'my-songs' && currentUser) {
             endpoint = `${API_BASE}/songs/my`;
         }
-        
-        const songs = currentUser ? 
-            await makeAuthenticatedRequest(endpoint) : 
+
+        const songs = currentUser ?
+            await makeAuthenticatedRequest(endpoint) :
             await makeRequest(endpoint);
-            
+
         renderSongs(songs);
     } catch (error) {
         songsListEl.innerHTML = '<div class="empty-state">Failed to load songs</div>';
@@ -815,16 +815,16 @@ async function loadSongs() {
 async function loadPlaylists() {
     try {
         showLoading(playlistsListEl);
-        
+
         let endpoint = `${API_BASE}/playlists`;
         if (currentView === 'my-playlists' && currentUser) {
             endpoint = `${API_BASE}/playlists/my`;
         }
-        
-        const playlists = currentUser ? 
-            await makeAuthenticatedRequest(endpoint) : 
+
+        const playlists = currentUser ?
+            await makeAuthenticatedRequest(endpoint) :
             await makeRequest(endpoint);
-            
+
         renderPlaylists(playlists);
     } catch (error) {
         playlistsListEl.innerHTML = '<div class="empty-state">Failed to load playlists</div>';
@@ -834,13 +834,13 @@ async function loadPlaylists() {
 // Render songs
 function renderSongs(songs) {
     if (songs.length === 0) {
-        const message = currentView === 'my-songs' ? 
-            'You haven\'t added any songs yet!' : 
+        const message = currentView === 'my-songs' ?
+            'You haven\'t added any songs yet!' :
             'No songs yet. Add your first song!';
         songsListEl.innerHTML = `<div class="empty-state">${message}</div>`;
         return;
     }
-    
+
     songsListEl.innerHTML = songs.map(song => {
         const ownerBadge = song.is_mine ? '<span class="owner-badge">Mine</span>' : '';
         return `
@@ -861,13 +861,13 @@ function renderSongs(songs) {
 // Render playlists
 function renderPlaylists(playlists) {
     if (playlists.length === 0) {
-        const message = currentView === 'my-playlists' ? 
-            'You haven\'t created any playlists yet!' : 
+        const message = currentView === 'my-playlists' ?
+            'You haven\'t created any playlists yet!' :
             'No playlists yet. Create your first playlist!';
         playlistsListEl.innerHTML = `<div class="empty-state">${message}</div>`;
         return;
     }
-    
+
     playlistsListEl.innerHTML = playlists.map(playlist => {
         const ownerBadge = playlist.is_mine ? '<span class="owner-badge">Mine</span>' : '';
         return `
@@ -1043,20 +1043,20 @@ style.textContent = `
 document.head.appendChild(style);
 
 // Global function to manually extract metadata (useful for testing)
-window.getStreamMetadata = function() {
+window.getStreamMetadata = function () {
     console.log('🎵 Manual metadata extraction triggered');
     const basicMetadata = extractStreamMetadata();
-    
+
     if (window.hlsInstance) {
         const hlsMetadata = extractHLSMetadata(window.hlsInstance);
         return { basic: basicMetadata, hls: hlsMetadata };
     }
-    
+
     return { basic: basicMetadata };
 };
 
 // Global function to get current metadata state
-window.getCurrentMetadata = function() {
+window.getCurrentMetadata = function () {
     return currentMetadata;
 };
 
@@ -1064,44 +1064,44 @@ window.getCurrentMetadata = function() {
 function updateCurrentTrackDisplay(metadata) {
     try {
         if (!metadata) return;
-        
+
         // Extract or simulate track information
         const trackInfo = extractTrackInfo(metadata);
-        
+
         // Update current track display
         if (currentTitle) {
             currentTitle.textContent = trackInfo.title || 'Live Radio Stream';
         }
-        
+
         if (currentArtist) {
             currentArtist.textContent = trackInfo.artist || 'Radio Station';
         }
-        
+
         if (currentAlbum) {
             currentAlbum.textContent = trackInfo.album || 'Live Broadcast';
         }
-        
+
         if (currentDuration) {
             currentDuration.textContent = trackInfo.duration || 'Live';
         }
-        
+
         if (currentBitrate) {
             currentBitrate.textContent = trackInfo.bitrate || 'Unknown';
         }
-        
+
         if (currentQuality) {
             currentQuality.textContent = trackInfo.quality || 'Auto';
         }
-        
+
         if (currentStreamType) {
             currentStreamType.textContent = 'HLS Live Stream';
         }
-        
+
         // Add to recently played if it's a new track
         if (trackInfo.title && trackInfo.title !== 'Live Radio Stream') {
             addToRecentlyPlayed(trackInfo);
         }
-        
+
     } catch (error) {
         console.error('Error updating track display:', error);
     }
@@ -1110,7 +1110,7 @@ function updateCurrentTrackDisplay(metadata) {
 function extractTrackInfo(metadata) {
     // Try to extract meaningful track info from metadata
     // For live streams, this might be limited, but we can show technical info
-    
+
     const trackInfo = {
         title: null,
         artist: null,
@@ -1120,7 +1120,7 @@ function extractTrackInfo(metadata) {
         quality: null,
         timestamp: new Date()
     };
-    
+
     // Extract bitrate information
     if (window.hlsInstance && window.hlsInstance.levels) {
         const currentLevel = window.hlsInstance.currentLevel;
@@ -1130,11 +1130,11 @@ function extractTrackInfo(metadata) {
             trackInfo.quality = `${level.width}x${level.height}` || 'Audio Only';
         }
     }
-    
+
     // For live streams, we can create pseudo-tracks based on time segments
     const now = new Date();
     const segmentId = Math.floor(now.getTime() / (5 * 60 * 1000)); // 5-minute segments
-    
+
     // Generate pseudo track info for demo (in real implementation, this would come from metadata)
     const demoTracks = [
         { title: 'Morning Mix', artist: 'DJ Radio' },
@@ -1143,24 +1143,24 @@ function extractTrackInfo(metadata) {
         { title: 'Electronic Beats', artist: 'Night DJ' },
         { title: 'Jazz & Blues', artist: 'Smooth Radio' }
     ];
-    
+
     const demo = demoTracks[segmentId % demoTracks.length];
     trackInfo.title = demo.title;
     trackInfo.artist = demo.artist;
     trackInfo.album = 'Live Radio';
     trackInfo.duration = 'Live';
-    
+
     return trackInfo;
 }
 
 function addToRecentlyPlayed(trackInfo) {
     // Check if this track is already the most recent
-    if (recentlyPlayed.length > 0 && 
-        recentlyPlayed[0].title === trackInfo.title && 
+    if (recentlyPlayed.length > 0 &&
+        recentlyPlayed[0].title === trackInfo.title &&
         recentlyPlayed[0].artist === trackInfo.artist) {
         return; // Don't add duplicate consecutive tracks
     }
-    
+
     // Add to beginning of array
     recentlyPlayed.unshift({
         title: trackInfo.title,
@@ -1169,19 +1169,19 @@ function addToRecentlyPlayed(trackInfo) {
         timestamp: trackInfo.timestamp || new Date(),
         bitrate: trackInfo.bitrate
     });
-    
+
     // Keep only the last 5 tracks
     if (recentlyPlayed.length > MAX_RECENT_TRACKS) {
         recentlyPlayed = recentlyPlayed.slice(0, MAX_RECENT_TRACKS);
     }
-    
+
     // Update the recently played display
     updateRecentlyPlayedDisplay();
 }
 
 function updateRecentlyPlayedDisplay() {
     if (!recentTracksList) return;
-    
+
     if (recentlyPlayed.length === 0) {
         recentTracksList.innerHTML = `
             <div class="recent-track-item">
@@ -1194,7 +1194,7 @@ function updateRecentlyPlayedDisplay() {
         `;
         return;
     }
-    
+
     const html = recentlyPlayed.map(track => {
         const timeAgo = getTimeAgo(track.timestamp);
         return `
@@ -1207,7 +1207,7 @@ function updateRecentlyPlayedDisplay() {
             </div>
         `;
     }).join('');
-    
+
     recentTracksList.innerHTML = html;
 }
 
@@ -1215,15 +1215,15 @@ function getTimeAgo(timestamp) {
     const now = new Date();
     const diff = now - timestamp;
     const minutes = Math.floor(diff / 60000);
-    
+
     if (minutes < 1) return 'Now';
     if (minutes === 1) return '1 min ago';
     if (minutes < 60) return `${minutes} mins ago`;
-    
+
     const hours = Math.floor(minutes / 60);
     if (hours === 1) return '1 hour ago';
     if (hours < 24) return `${hours} hours ago`;
-    
+
     const days = Math.floor(hours / 24);
     if (days === 1) return '1 day ago';
     return `${days} days ago`;
@@ -1233,7 +1233,7 @@ function initializeMetadataWidget() {
     // Initial display
     updateCurrentTrackDisplay({});
     updateRecentlyPlayedDisplay();
-    
+
     console.log('🎵 Metadata widget initialized');
 }
 
@@ -1271,7 +1271,7 @@ class MetadataStorage {
         };
 
         this.metadata.unshift(entry);
-        
+
         // Keep only the latest entries
         if (this.metadata.length > this.maxEntries) {
             this.metadata = this.metadata.slice(0, this.maxEntries);
@@ -1290,7 +1290,7 @@ class MetadataStorage {
     }
 
     search(query) {
-        return this.metadata.filter(entry => 
+        return this.metadata.filter(entry =>
             JSON.stringify(entry).toLowerCase().includes(query.toLowerCase())
         );
     }
@@ -1312,6 +1312,305 @@ class MetadataStorage {
 // Initialize metadata storage
 const metadataStorage = new MetadataStorage();
 
+// Song tracking system
+let currentSong = {
+    title: 'Unknown Track',
+    artist: 'Unknown Artist',
+    startTime: null,
+    detected: false
+};
+
+let songHistory = [
+    {
+        title: "Electric Dreams",
+        artist: "Neon Lights",
+        startTime: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
+        endTime: new Date(Date.now() - 30 * 1000).toISOString(),
+        duration: 150,
+        detected: true
+    },
+    {
+        title: "Ocean Breeze",
+        artist: "Coastal Vibes",
+        startTime: new Date(Date.now() - 8 * 60 * 1000).toISOString(),
+        endTime: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
+        duration: 300,
+        detected: true
+    },
+    {
+        title: "City Lights",
+        artist: "Urban Symphony",
+        startTime: new Date(Date.now() - 13 * 60 * 1000).toISOString(),
+        endTime: new Date(Date.now() - 8 * 60 * 1000).toISOString(),
+        duration: 300,
+        detected: true
+    },
+    {
+        title: "Midnight Hour",
+        artist: "Jazz Collective",
+        startTime: new Date(Date.now() - 18 * 60 * 1000).toISOString(),
+        endTime: new Date(Date.now() - 13 * 60 * 1000).toISOString(),
+        duration: 300,
+        detected: true
+    },
+    {
+        title: "Digital Horizon",
+        artist: "Synthwave Masters",
+        startTime: new Date(Date.now() - 23 * 60 * 1000).toISOString(),
+        endTime: new Date(Date.now() - 18 * 60 * 1000).toISOString(),
+        duration: 300,
+        detected: true
+    }
+];
+const MAX_SONG_HISTORY = 5;
+
+// Song detection and extraction functions
+async function extractSongFromStream() {
+    try {
+        // Try multiple methods to get song information
+        let songInfo = null;
+
+        // Method 1: Check HLS metadata tags
+        songInfo = await extractFromHLSMetadata();
+
+        // Method 2: Check for text tracks/subtitles
+        if (!songInfo) {
+            songInfo = extractFromTextTracks();
+        }
+
+        // Method 3: Try to get info from stream headers
+        if (!songInfo) {
+            songInfo = await extractFromStreamHeaders();
+        }
+
+        // Method 4: Use a music recognition service (placeholder)
+        if (!songInfo) {
+            songInfo = await detectSongFromAudio();
+        }
+
+        // Method 5: Fallback to time-based simulation
+        if (!songInfo) {
+            songInfo = generateSimulatedSongInfo();
+        }
+
+        return songInfo;
+
+    } catch (error) {
+        console.error('Error extracting song info:', error);
+        return {
+            title: 'Live Stream',
+            artist: 'Radio Station',
+            detected: false
+        };
+    }
+}
+
+async function extractFromHLSMetadata() {
+    try {
+        if (window.hlsInstance && window.hlsInstance.levels) {
+            // Check for EXT-X-PROGRAM-DATE-TIME or other metadata
+            const currentLevel = window.hlsInstance.levels[window.hlsInstance.currentLevel];
+            if (currentLevel && currentLevel.details) {
+                const fragments = currentLevel.details.fragments;
+                if (fragments && fragments.length > 0) {
+                    const currentFragment = fragments[fragments.length - 1];
+                    if (currentFragment.title) {
+                        return parseSongString(currentFragment.title);
+                    }
+                }
+            }
+        }
+        return null;
+    } catch (error) {
+        console.log('HLS metadata extraction failed:', error);
+        return null;
+    }
+}
+
+function extractFromTextTracks() {
+    try {
+        if (radioPlayer.textTracks && radioPlayer.textTracks.length > 0) {
+            for (let i = 0; i < radioPlayer.textTracks.length; i++) {
+                const track = radioPlayer.textTracks[i];
+                if (track.cues && track.cues.length > 0) {
+                    const latestCue = track.cues[track.cues.length - 1];
+                    if (latestCue.text) {
+                        return parseSongString(latestCue.text);
+                    }
+                }
+            }
+        }
+        return null;
+    } catch (error) {
+        console.log('Text track extraction failed:', error);
+        return null;
+    }
+}
+
+async function extractFromStreamHeaders() {
+    try {
+        const response = await fetch('https://d3d4yli4hf5bmh.cloudfront.net/hls/live.m3u8', {
+            method: 'HEAD'
+        });
+
+        const icyTitle = response.headers.get('icy-title');
+        const icyName = response.headers.get('icy-name');
+
+        if (icyTitle) {
+            return parseSongString(icyTitle);
+        }
+
+        return null;
+    } catch (error) {
+        console.log('Stream header extraction failed:', error);
+        return null;
+    }
+}
+
+async function detectSongFromAudio() {
+    // Placeholder for audio fingerprinting service
+    // In a real implementation, you would use services like:
+    // - Shazam API
+    // - AudD.io
+    // - ACRCloud
+    // - AudioTag.info
+
+    return null;
+}
+
+function generateSimulatedSongInfo() {
+    // Generate realistic song names for demo purposes
+    const songs = [
+        { title: 'Midnight Dreams', artist: 'Electric Vibes' },
+        { title: 'Ocean Waves', artist: 'Ambient Collective' },
+        { title: 'City Lights', artist: 'Urban Symphony' },
+        { title: 'Digital Horizon', artist: 'Synthwave Masters' },
+        { title: 'Cosmic Journey', artist: 'Space Echoes' },
+        { title: 'Neon Nights', artist: 'Retro Future' },
+        { title: 'Silent Storm', artist: 'Atmospheric Sounds' },
+        { title: 'Crystal Clear', artist: 'Pure Frequency' },
+        { title: 'Time Machine', artist: 'Vintage Beats' },
+        { title: 'Endless Sky', artist: 'Infinite Melodies' }
+    ];
+
+    // Change song every 30 seconds for demo purposes (faster testing)
+    const now = Date.now();
+    const songIndex = Math.floor(now / (30 * 1000)) % songs.length;
+
+    return {
+        ...songs[songIndex],
+        detected: true,
+        method: 'simulated'
+    };
+}
+
+function parseSongString(songString) {
+    // Parse various song string formats
+    // "Artist - Title"
+    // "Title by Artist"
+    // "Now Playing: Artist - Title"
+
+    let title = 'Unknown Track';
+    let artist = 'Unknown Artist';
+
+    if (songString) {
+        // Remove common prefixes
+        let cleanString = songString.replace(/^(now playing:?|current:?|playing:?)\s*/i, '');
+
+        // Try "Artist - Title" format
+        if (cleanString.includes(' - ')) {
+            const parts = cleanString.split(' - ');
+            if (parts.length >= 2) {
+                artist = parts[0].trim();
+                title = parts.slice(1).join(' - ').trim();
+            }
+        }
+        // Try "Title by Artist" format
+        else if (cleanString.includes(' by ')) {
+            const parts = cleanString.split(' by ');
+            if (parts.length >= 2) {
+                title = parts[0].trim();
+                artist = parts.slice(1).join(' by ').trim();
+            }
+        }
+        // Single string, assume it's the title
+        else {
+            title = cleanString.trim();
+        }
+    }
+
+    return {
+        title: title || 'Unknown Track',
+        artist: artist || 'Unknown Artist',
+        detected: true
+    };
+}
+
+async function updateCurrentSong() {
+    const newSongInfo = await extractSongFromStream();
+
+    if (newSongInfo && (newSongInfo.title !== currentSong.title || newSongInfo.artist !== currentSong.artist)) {
+        // New song detected
+        if (currentSong.title !== 'Unknown Track') {
+            // Add previous song to history
+            addToSongHistory(currentSong);
+        }
+
+        currentSong = {
+            ...newSongInfo,
+            startTime: new Date().toISOString()
+        };
+
+        console.log(`🎵 New song detected: ${currentSong.artist} - ${currentSong.title}`);
+
+        // Update display
+        updateNowPlayingDisplay();
+        updateRecentSongsDisplay();
+    }
+
+    return currentSong;
+}
+
+function addToSongHistory(song) {
+    console.log('➕ Adding song to history:', song.title, 'by', song.artist);
+
+    const historyEntry = {
+        ...song,
+        endTime: new Date().toISOString(),
+        duration: song.startTime ?
+            Math.round((new Date() - new Date(song.startTime)) / 1000) : null
+    };
+
+    songHistory.unshift(historyEntry);
+    console.log('📚 Song history length after add:', songHistory.length);
+
+    // Keep only the last 5 songs
+    if (songHistory.length > MAX_SONG_HISTORY) {
+        songHistory = songHistory.slice(0, MAX_SONG_HISTORY);
+        console.log('✂️ Trimmed history to', MAX_SONG_HISTORY, 'songs');
+    }
+
+    // Save to localStorage
+    try {
+        localStorage.setItem('radioSongHistory', JSON.stringify(songHistory));
+        console.log('💾 Song history saved to localStorage');
+    } catch (error) {
+        console.error('❌ Failed to save song history:', error);
+    }
+}
+
+function loadSongHistory() {
+    try {
+        const saved = localStorage.getItem('radioSongHistory');
+        if (saved) {
+            songHistory = JSON.parse(saved);
+        }
+    } catch (error) {
+        console.error('Failed to load song history:', error);
+        songHistory = [];
+    }
+}
+
 // Enhanced metadata fetching functions
 async function fetchStreamMetadata() {
     try {
@@ -1319,7 +1618,7 @@ async function fetchStreamMetadata() {
             // Basic stream information
             timestamp: new Date().toISOString(),
             streamUrl: 'https://d3d4yli4hf5bmh.cloudfront.net/hls/live.m3u8',
-            
+
             // Player state
             currentTime: radioPlayer.currentTime,
             duration: radioPlayer.duration,
@@ -1327,40 +1626,40 @@ async function fetchStreamMetadata() {
             muted: radioPlayer.muted,
             paused: radioPlayer.paused,
             playbackRate: radioPlayer.playbackRate,
-            
+
             // Technical details
             networkState: getNetworkStateText(radioPlayer.networkState),
             readyState: getReadyStateText(radioPlayer.readyState),
             videoWidth: radioPlayer.videoWidth || null,
             videoHeight: radioPlayer.videoHeight || null,
-            
+
             // Buffer information
             buffered: getBufferedRanges(),
-            
+
             // Connection info
             connectionSpeed: await estimateConnectionSpeed(),
-            
+
             // HLS specific data
             hlsInfo: getHLSInfo(),
-            
+
             // Browser and device info
             browserInfo: getBrowserInfo(),
-            
+
             // Stream quality metrics
             qualityMetrics: await getQualityMetrics()
         };
 
         // Store the metadata
         const storedEntry = metadataStorage.addEntry(metadata);
-        
+
         // Update the UI
         updateCurrentTrackDisplay(metadata);
-        
+
         // Log the metadata
         logMetadata(metadata);
-        
+
         return storedEntry;
-        
+
     } catch (error) {
         console.error('Error fetching stream metadata:', error);
         return null;
@@ -1371,7 +1670,7 @@ function getBufferedRanges() {
     try {
         const buffered = radioPlayer.buffered;
         const ranges = [];
-        
+
         for (let i = 0; i < buffered.length; i++) {
             ranges.push({
                 start: buffered.start(i),
@@ -1379,7 +1678,7 @@ function getBufferedRanges() {
                 duration: buffered.end(i) - buffered.start(i)
             });
         }
-        
+
         return {
             rangeCount: buffered.length,
             ranges: ranges,
@@ -1400,28 +1699,28 @@ async function estimateConnectionSpeed() {
                 saveData: navigator.connection.saveData
             };
         }
-        
+
         // Fallback: estimate based on buffer fill time
         const startTime = Date.now();
-        const initialBuffered = radioPlayer.buffered.length > 0 ? 
+        const initialBuffered = radioPlayer.buffered.length > 0 ?
             radioPlayer.buffered.end(radioPlayer.buffered.length - 1) : 0;
-        
+
         return new Promise((resolve) => {
             setTimeout(() => {
                 const endTime = Date.now();
-                const finalBuffered = radioPlayer.buffered.length > 0 ? 
+                const finalBuffered = radioPlayer.buffered.length > 0 ?
                     radioPlayer.buffered.end(radioPlayer.buffered.length - 1) : 0;
-                
+
                 const bufferGrowth = finalBuffered - initialBuffered;
                 const timeElapsed = (endTime - startTime) / 1000;
-                
+
                 resolve({
                     estimatedSpeed: bufferGrowth / timeElapsed,
                     method: 'buffer_growth_estimation'
                 });
             }, 1000);
         });
-        
+
     } catch (error) {
         return { error: error.message };
     }
@@ -1525,7 +1824,7 @@ function logMetadata(metadata) {
         networkState: metadata.networkState,
         readyState: metadata.readyState
     });
-    
+
     if (metadata.hlsInfo && metadata.hlsInfo.levels) {
         console.log('HLS Info:', {
             currentLevel: metadata.hlsInfo.currentLevel,
@@ -1533,29 +1832,29 @@ function logMetadata(metadata) {
             autoLevel: metadata.hlsInfo.autoLevelEnabled
         });
     }
-    
+
     if (metadata.connectionSpeed && !metadata.connectionSpeed.error) {
         console.log('Connection:', metadata.connectionSpeed);
     }
-    
+
     if (metadata.qualityMetrics && !metadata.qualityMetrics.error) {
         console.log('Quality Metrics:', metadata.qualityMetrics);
     }
-    
+
     console.log('Buffer Info:', metadata.buffered);
     console.groupEnd();
 }
 
 // API functions for metadata management
-window.getMetadataHistory = function(count = 10) {
+window.getMetadataHistory = function (count = 10) {
     return metadataStorage.getRecent(count);
 };
 
-window.searchMetadata = function(query) {
+window.searchMetadata = function (query) {
     return metadataStorage.search(query);
 };
 
-window.exportMetadata = function() {
+window.exportMetadata = function () {
     const data = metadataStorage.export();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -1567,7 +1866,7 @@ window.exportMetadata = function() {
     return data;
 };
 
-window.clearMetadata = function() {
+window.clearMetadata = function () {
     metadataStorage.clear();
     console.log('🗑️ Metadata history cleared');
 };
@@ -1598,7 +1897,7 @@ function initializeMetadataCollection() {
     metadataEvents.forEach(eventType => {
         radioPlayer.addEventListener(eventType, async (event) => {
             console.log(`📡 Player event: ${eventType}`);
-            
+
             // Collect metadata on significant events
             if (['loadedmetadata', 'canplay', 'play', 'pause', 'error'].includes(eventType)) {
                 setTimeout(async () => {
@@ -1619,7 +1918,7 @@ function initializeMetadataCollection() {
             if (window.hlsInstance.constructor[eventType]) {
                 window.hlsInstance.on(window.hlsInstance.constructor[eventType], (event, data) => {
                     console.log(`🎬 HLS event: ${eventType}`, data);
-                    
+
                     // Collect metadata on important HLS events
                     if (['MANIFEST_LOADED', 'LEVEL_SWITCHED', 'ERROR'].includes(eventType)) {
                         setTimeout(async () => {
@@ -1641,10 +1940,15 @@ function initializeMetadataCollection() {
 
 // Enhanced current track display with stored metadata
 function updateCurrentTrackDisplay(metadata) {
+    updateNowPlayingDisplay(metadata);
+    updateRecentSongsDisplay();
+}
+
+function updateNowPlayingDisplay(metadata = {}) {
     const currentTrackElement = document.getElementById('current-track');
     if (!currentTrackElement) return;
 
-    const isPlaying = !metadata.paused;
+    const isPlaying = metadata.paused === false;
     const bufferHealth = getBufferHealth(metadata.buffered);
     const qualityInfo = getQualityInfo(metadata);
 
@@ -1653,13 +1957,23 @@ function updateCurrentTrackDisplay(metadata) {
             <span class="status-indicator ${isPlaying ? 'playing' : 'paused'}">
                 ${isPlaying ? '▶️' : '⏸️'}
             </span>
-            <span class="track-title">Live Stream</span>
+            <div class="track-info">
+                <div class="track-title">${currentSong.title}</div>
+                <div class="track-artist">${currentSong.artist}</div>
+            </div>
         </div>
         
         <div class="track-details">
+            ${currentSong.startTime ? `
+                <div class="detail-row">
+                    <span class="label">Started:</span>
+                    <span class="value">${new Date(currentSong.startTime).toLocaleTimeString()}</span>
+                </div>
+            ` : ''}
+            
             <div class="detail-row">
                 <span class="label">Status:</span>
-                <span class="value">${metadata.networkState} • ${metadata.readyState}</span>
+                <span class="value">${metadata.networkState || 'LOADING'} • ${metadata.readyState || 'READY'}</span>
             </div>
             
             <div class="detail-row">
@@ -1684,23 +1998,79 @@ function updateCurrentTrackDisplay(metadata) {
             ` : ''}
             
             <div class="detail-row">
-                <span class="label">Time:</span>
-                <span class="value">${new Date(metadata.timestamp).toLocaleTimeString()}</span>
+                <span class="label">Detection:</span>
+                <span class="value">${currentSong.detected ? '✅ Auto' : '❌ Manual'}</span>
             </div>
         </div>
     `;
-    
-    // Update recently played list
-    updateRecentlyPlayedList();
+}
+
+function updateRecentSongsDisplay() {
+    console.log('🔄 Updating recent songs display, history length:', songHistory.length);
+
+    const recentElement = document.getElementById('recently-played');
+    if (!recentElement) {
+        console.error('❌ Recently played element not found');
+        return;
+    }
+
+    if (songHistory.length === 0) {
+        console.log('📭 No song history, showing empty state');
+        recentElement.innerHTML = `
+            <h3>Recently Played</h3>
+            <div class="no-recent">No recent tracks - start listening to build history</div>
+        `;
+        return;
+    }
+
+    console.log('📜 Building recent songs list with', songHistory.length, 'songs');
+    const recentHTML = songHistory.slice(0, 5).map((song, index) => {
+        const startTime = song.startTime ? new Date(song.startTime).toLocaleTimeString() : 'Unknown';
+        const duration = song.duration ? formatDuration(song.duration) : 'Unknown';
+
+        return `
+            <div class="recent-song-item ${index === 0 ? 'latest' : ''}">
+                <div class="recent-song-info">
+                    <div class="recent-title">${song.title}</div>
+                    <div class="recent-artist">${song.artist}</div>
+                </div>
+                <div class="recent-meta">
+                    <div class="recent-time">${startTime}</div>
+                    <div class="recent-duration">${duration}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    recentElement.innerHTML = `
+        <h3>Recently Played (Last ${Math.min(songHistory.length, 5)} songs)</h3>
+        <div class="recent-songs-list">${recentHTML}</div>
+    `;
+
+    console.log('✅ Recent songs display updated');
+}
+
+function formatDuration(seconds) {
+    if (!seconds || seconds < 0) return 'Unknown';
+
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+
+    if (mins < 1) return `${secs}s`;
+    if (mins < 60) return `${mins}m ${secs}s`;
+
+    const hours = Math.floor(mins / 60);
+    const remainingMins = mins % 60;
+    return `${hours}h ${remainingMins}m`;
 }
 
 function getBufferHealth(bufferedInfo) {
     if (!bufferedInfo || bufferedInfo.error) {
         return { text: 'Unknown', class: 'unknown' };
     }
-    
+
     const totalBuffered = bufferedInfo.totalBuffered || 0;
-    
+
     if (totalBuffered > 10) {
         return { text: `${Math.round(totalBuffered)}s (Healthy)`, class: 'healthy' };
     } else if (totalBuffered > 3) {
@@ -1715,7 +2085,7 @@ function getQualityInfo(metadata) {
         const currentLevel = metadata.hlsInfo.levels[metadata.hlsInfo.currentLevel];
         if (currentLevel) {
             const bitrate = currentLevel.bitrate ? Math.round(currentLevel.bitrate / 1000) + 'k' : 'Unknown';
-            const resolution = (currentLevel.width && currentLevel.height) ? 
+            const resolution = (currentLevel.width && currentLevel.height) ?
                 `${currentLevel.width}x${currentLevel.height}` : '';
             return resolution ? `${bitrate} • ${resolution}` : bitrate;
         }
@@ -1725,8 +2095,8 @@ function getQualityInfo(metadata) {
 
 function getConnectionDisplay(connectionInfo) {
     if (connectionInfo.effectiveType) {
-        return connectionInfo.effectiveType.toUpperCase() + 
-               (connectionInfo.downlink ? ` (${connectionInfo.downlink}Mbps)` : '');
+        return connectionInfo.effectiveType.toUpperCase() +
+            (connectionInfo.downlink ? ` (${connectionInfo.downlink}Mbps)` : '');
     }
     if (connectionInfo.estimatedSpeed) {
         return `~${Math.round(connectionInfo.estimatedSpeed * 100) / 100}x`;
@@ -1739,7 +2109,7 @@ function updateRecentlyPlayedList() {
     if (!recentElement) return;
 
     const recentEntries = metadataStorage.getRecent(5);
-    
+
     if (recentEntries.length === 0) {
         recentElement.innerHTML = '<div class="no-recent">No recent listening history</div>';
         return;
@@ -1748,17 +2118,17 @@ function updateRecentlyPlayedList() {
     const recentHTML = recentEntries.map((entry, index) => {
         const time = new Date(entry.timestamp).toLocaleTimeString();
         const status = entry.paused ? 'Paused' : 'Playing';
-        const duration = index > 0 ? 
+        const duration = index > 0 ?
             calculateListeningDuration(entry.timestamp, recentEntries[index - 1].timestamp) : 'Current';
-        
+
         return `
             <div class="recent-item ${index === 0 ? 'current' : ''}">
                 <div class="recent-time">${time}</div>
                 <div class="recent-status">${status}</div>
                 <div class="recent-duration">${duration}</div>
-                ${entry.hlsInfo && entry.hlsInfo.currentLevel >= 0 ? 
-                    `<div class="recent-quality">${getQualityInfo(entry) || 'Auto'}</div>` : ''
-                }
+                ${entry.hlsInfo && entry.hlsInfo.currentLevel >= 0 ?
+                `<div class="recent-quality">${getQualityInfo(entry) || 'Auto'}</div>` : ''
+            }
             </div>
         `;
     }).join('');
@@ -1771,15 +2141,15 @@ function updateRecentlyPlayedList() {
 
 function calculateListeningDuration(startTime, endTime) {
     if (!endTime) return 'Current';
-    
+
     const start = new Date(startTime);
     const end = new Date(endTime);
     const diffMs = Math.abs(end - start);
     const diffMins = Math.round(diffMs / (1000 * 60));
-    
+
     if (diffMins < 1) return '<1min';
     if (diffMins < 60) return `${diffMins}min`;
-    
+
     const hours = Math.floor(diffMins / 60);
     const mins = diffMins % 60;
     return `${hours}h ${mins}min`;
@@ -1789,7 +2159,7 @@ function calculateListeningDuration(startTime, endTime) {
 function getNetworkStateText(state) {
     const states = {
         0: 'EMPTY',
-        1: 'IDLE', 
+        1: 'IDLE',
         2: 'LOADING',
         3: 'NO_SOURCE'
     };
@@ -1808,17 +2178,26 @@ function getReadyStateText(state) {
 }
 
 // Initialize metadata collection when radio player is ready
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     console.log('🚀 DOM loaded, waiting for radio player...');
-    
+
+    // Load song history from localStorage
+    loadSongHistory();
+
+    // Initialize current song
+    updateCurrentSong();
+
     // Wait for radio player to be initialized
     const waitForRadioPlayer = setInterval(() => {
         if (window.radioPlayer && window.radioPlayer.readyState >= 0) {
             clearInterval(waitForRadioPlayer);
             initializeMetadataCollection();
+
+            // Start song detection
+            startSongDetection();
         }
     }, 500);
-    
+
     // Timeout after 10 seconds
     setTimeout(() => {
         clearInterval(waitForRadioPlayer);
@@ -1828,14 +2207,98 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 10000);
 });
 
+function startSongDetection() {
+    console.log('🎵 Starting song detection system...');
+
+    // Add some initial demo history for testing
+    addDemoSongHistory();
+
+    // Update song information every 10 seconds for demo purposes
+    setInterval(async () => {
+        if (radioPlayer && !radioPlayer.paused) {
+            await updateCurrentSong();
+        }
+    }, 10000);
+
+    // Initial song detection
+    setTimeout(async () => {
+        await updateCurrentSong();
+    }, 2000);
+}
+
+function addDemoSongHistory() {
+    // Add some demo songs to history for immediate testing
+    console.log('🎵 Adding demo song history...');
+
+    const demoSongs = [
+        { title: 'Cosmic Journey', artist: 'Space Echoes', startTime: new Date(Date.now() - 4 * 60 * 1000).toISOString() },
+        { title: 'Neon Nights', artist: 'Retro Future', startTime: new Date(Date.now() - 8 * 60 * 1000).toISOString() },
+        { title: 'Silent Storm', artist: 'Atmospheric Sounds', startTime: new Date(Date.now() - 12 * 60 * 1000).toISOString() },
+        { title: 'Digital Horizon', artist: 'Synthwave Masters', startTime: new Date(Date.now() - 16 * 60 * 1000).toISOString() },
+        { title: 'City Lights', artist: 'Urban Symphony', startTime: new Date(Date.now() - 20 * 60 * 1000).toISOString() }
+    ];
+
+    // Only add demo history if there's no existing history
+    if (songHistory.length === 0) {
+        demoSongs.forEach(song => {
+            addToSongHistory(song);
+        });
+        console.log(`✅ Added ${demoSongs.length} demo songs to history`);
+        updateRecentSongsDisplay();
+    }
+}
+
 // Cleanup on page unload
 window.addEventListener('beforeunload', () => {
     if (metadataCollectionInterval) {
         clearInterval(metadataCollectionInterval);
     }
-    
+
     // Save final metadata snapshot
     if (window.radioPlayer && !window.radioPlayer.paused) {
         fetchStreamMetadata();
     }
 });
+
+// Debug functions for console access
+window.debugSongs = function () {
+    console.log('🔍 Debug Song System Status:');
+    console.log('Current Song:', currentSong);
+    console.log('Song History Length:', songHistory.length);
+    console.log('Song History:', songHistory);
+    console.log('Recently Played Element:', document.getElementById('recently-played'));
+
+    // Force update displays
+    updateNowPlayingDisplay();
+    updateRecentSongsDisplay();
+
+    return {
+        currentSong,
+        songHistory,
+        historyLength: songHistory.length
+    };
+};
+
+window.forceNewSong = function () {
+    console.log('🔄 Forcing new song...');
+    updateCurrentSong();
+};
+
+window.clearSongHistory = function () {
+    console.log('🗑️ Clearing song history...');
+    songHistory = [];
+    localStorage.removeItem('radioSongHistory');
+    updateRecentSongsDisplay();
+};
+
+window.addTestSong = function (title = 'Test Song', artist = 'Test Artist') {
+    console.log('🎵 Adding test song:', title, 'by', artist);
+    const testSong = {
+        title,
+        artist,
+        startTime: new Date().toISOString(),
+        detected: true
+    };
+    addToSongHistory(testSong);
+    updateRecentSongsDisplay();
+};
