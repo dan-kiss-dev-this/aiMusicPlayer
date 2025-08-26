@@ -23,6 +23,16 @@ const muteBtn = document.getElementById('mute-btn');
 const volumeSlider = document.getElementById('volume-slider');
 const radioStatus = document.getElementById('radio-status');
 
+// Metadata Widget Elements
+const currentTitle = document.getElementById('current-title');
+const currentArtist = document.getElementById('current-artist');
+const currentAlbum = document.getElementById('current-album');
+const currentDuration = document.getElementById('current-duration');
+const currentBitrate = document.getElementById('current-bitrate');
+const currentQuality = document.getElementById('current-quality');
+const currentStreamType = document.getElementById('current-stream-type');
+const recentTracksList = document.getElementById('recent-tracks');
+
 // Auth Elements
 const loginBtn = document.getElementById('login-btn');
 const registerBtn = document.getElementById('register-btn');
@@ -64,11 +74,21 @@ let currentMetadata = {
 };
 let metadataUpdateInterval = null;
 
+// Recently played tracks (max 5)
+let recentlyPlayed = [];
+const MAX_RECENT_TRACKS = 5;
+
+// Metadata storage
+let metadataHistory = [];
+let persistedMetadata = JSON.parse(localStorage.getItem('radioMetadata')) || [];
+const MAX_METADATA_HISTORY = 100;
+
 // Initialize the app
 document.addEventListener('DOMContentLoaded', () => {
     checkServerStatus();
     initializeAuth();
     initializeRadioPlayer();
+    initializeMetadataWidget();
     setupEventListeners();
     loadSongs();
     loadPlaylists();
@@ -160,7 +180,12 @@ function initializeRadioPlayer() {
     }
     
     // Set initial volume
-    radioPlayer.volume = volumeSlider.value / 100;
+    if (volumeSlider) {
+        radioPlayer.volume = volumeSlider.value / 100;
+    } else {
+        // Default volume when no volume slider is present
+        radioPlayer.volume = 0.7;
+    }
     
     // Add event listeners
     setupRadioEventListeners();
@@ -228,16 +253,22 @@ function loadHLSLibrary() {
 // Setup radio player event listeners
 function setupRadioEventListeners() {
     // Play/Pause button
-    playPauseBtn.addEventListener('click', togglePlayPause);
+    if (playPauseBtn) {
+        playPauseBtn.addEventListener('click', togglePlayPause);
+    }
     
     // Mute button
-    muteBtn.addEventListener('click', toggleMute);
+    if (muteBtn) {
+        muteBtn.addEventListener('click', toggleMute);
+    }
     
     // Volume slider
-    volumeSlider.addEventListener('input', (e) => {
-        radioPlayer.volume = e.target.value / 100;
-        updateMuteButton();
-    });
+    if (volumeSlider) {
+        volumeSlider.addEventListener('input', (e) => {
+            radioPlayer.volume = e.target.value / 100;
+            updateMuteButton();
+        });
+    }
     
     // Radio player events
     radioPlayer.addEventListener('loadstart', () => {
@@ -403,6 +434,9 @@ function extractStreamMetadata() {
         // Update current metadata
         currentMetadata = { ...currentMetadata, ...metadata };
         
+        // Update the metadata widget display
+        updateCurrentTrackDisplay(metadata);
+        
         return metadata;
     } catch (error) {
         console.error('Error extracting metadata:', error);
@@ -458,14 +492,19 @@ function startMetadataMonitoring() {
         clearInterval(metadataUpdateInterval);
     }
     
-    // Extract metadata every 10 seconds
+    // Extract metadata every 30 seconds for widget updates
     metadataUpdateInterval = setInterval(() => {
         if (!radioPlayer.paused) {
             extractStreamMetadata();
         }
-    }, 10000);
+    }, 30000);
     
-    console.log('🎵 Started metadata monitoring (updates every 10 seconds)');
+    // Also update recently played timestamps every minute
+    setInterval(() => {
+        updateRecentlyPlayedDisplay();
+    }, 60000);
+    
+    console.log('🎵 Started metadata monitoring (updates every 30 seconds)');
 }
 
 function stopMetadataMonitoring() {
@@ -514,12 +553,14 @@ function extractHLSMetadata(hls) {
 
 // Update mute button text
 function updateMuteButton() {
-    if (radioPlayer.muted || radioPlayer.volume === 0) {
-        muteBtn.textContent = '🔇';
-    } else if (radioPlayer.volume < 0.5) {
-        muteBtn.textContent = '🔉';
-    } else {
-        muteBtn.textContent = '🔊';
+    if (muteBtn) {
+        if (radioPlayer.muted || radioPlayer.volume === 0) {
+            muteBtn.textContent = '🔇';
+        } else if (radioPlayer.volume < 0.5) {
+            muteBtn.textContent = '🔉';
+        } else {
+            muteBtn.textContent = '🔊';
+        }
     }
 }
 
@@ -1018,3 +1059,783 @@ window.getStreamMetadata = function() {
 window.getCurrentMetadata = function() {
     return currentMetadata;
 };
+
+// Metadata Widget Functions
+function updateCurrentTrackDisplay(metadata) {
+    try {
+        if (!metadata) return;
+        
+        // Extract or simulate track information
+        const trackInfo = extractTrackInfo(metadata);
+        
+        // Update current track display
+        if (currentTitle) {
+            currentTitle.textContent = trackInfo.title || 'Live Radio Stream';
+        }
+        
+        if (currentArtist) {
+            currentArtist.textContent = trackInfo.artist || 'Radio Station';
+        }
+        
+        if (currentAlbum) {
+            currentAlbum.textContent = trackInfo.album || 'Live Broadcast';
+        }
+        
+        if (currentDuration) {
+            currentDuration.textContent = trackInfo.duration || 'Live';
+        }
+        
+        if (currentBitrate) {
+            currentBitrate.textContent = trackInfo.bitrate || 'Unknown';
+        }
+        
+        if (currentQuality) {
+            currentQuality.textContent = trackInfo.quality || 'Auto';
+        }
+        
+        if (currentStreamType) {
+            currentStreamType.textContent = 'HLS Live Stream';
+        }
+        
+        // Add to recently played if it's a new track
+        if (trackInfo.title && trackInfo.title !== 'Live Radio Stream') {
+            addToRecentlyPlayed(trackInfo);
+        }
+        
+    } catch (error) {
+        console.error('Error updating track display:', error);
+    }
+}
+
+function extractTrackInfo(metadata) {
+    // Try to extract meaningful track info from metadata
+    // For live streams, this might be limited, but we can show technical info
+    
+    const trackInfo = {
+        title: null,
+        artist: null,
+        album: null,
+        duration: null,
+        bitrate: null,
+        quality: null,
+        timestamp: new Date()
+    };
+    
+    // Extract bitrate information
+    if (window.hlsInstance && window.hlsInstance.levels) {
+        const currentLevel = window.hlsInstance.currentLevel;
+        if (currentLevel >= 0 && window.hlsInstance.levels[currentLevel]) {
+            const level = window.hlsInstance.levels[currentLevel];
+            trackInfo.bitrate = `${Math.round(level.bitrate / 1000)} kbps`;
+            trackInfo.quality = `${level.width}x${level.height}` || 'Audio Only';
+        }
+    }
+    
+    // For live streams, we can create pseudo-tracks based on time segments
+    const now = new Date();
+    const segmentId = Math.floor(now.getTime() / (5 * 60 * 1000)); // 5-minute segments
+    
+    // Generate pseudo track info for demo (in real implementation, this would come from metadata)
+    const demoTracks = [
+        { title: 'Morning Mix', artist: 'DJ Radio' },
+        { title: 'Top Hits Hour', artist: 'Radio Station' },
+        { title: 'Classic Rock Block', artist: 'The Mix' },
+        { title: 'Electronic Beats', artist: 'Night DJ' },
+        { title: 'Jazz & Blues', artist: 'Smooth Radio' }
+    ];
+    
+    const demo = demoTracks[segmentId % demoTracks.length];
+    trackInfo.title = demo.title;
+    trackInfo.artist = demo.artist;
+    trackInfo.album = 'Live Radio';
+    trackInfo.duration = 'Live';
+    
+    return trackInfo;
+}
+
+function addToRecentlyPlayed(trackInfo) {
+    // Check if this track is already the most recent
+    if (recentlyPlayed.length > 0 && 
+        recentlyPlayed[0].title === trackInfo.title && 
+        recentlyPlayed[0].artist === trackInfo.artist) {
+        return; // Don't add duplicate consecutive tracks
+    }
+    
+    // Add to beginning of array
+    recentlyPlayed.unshift({
+        title: trackInfo.title,
+        artist: trackInfo.artist,
+        album: trackInfo.album,
+        timestamp: trackInfo.timestamp || new Date(),
+        bitrate: trackInfo.bitrate
+    });
+    
+    // Keep only the last 5 tracks
+    if (recentlyPlayed.length > MAX_RECENT_TRACKS) {
+        recentlyPlayed = recentlyPlayed.slice(0, MAX_RECENT_TRACKS);
+    }
+    
+    // Update the recently played display
+    updateRecentlyPlayedDisplay();
+}
+
+function updateRecentlyPlayedDisplay() {
+    if (!recentTracksList) return;
+    
+    if (recentlyPlayed.length === 0) {
+        recentTracksList.innerHTML = `
+            <div class="recent-track-item">
+                <div class="recent-track-info">
+                    <div class="recent-title">No recent tracks</div>
+                    <div class="recent-artist">Start playing to see history</div>
+                </div>
+                <div class="recent-time">-</div>
+            </div>
+        `;
+        return;
+    }
+    
+    const html = recentlyPlayed.map(track => {
+        const timeAgo = getTimeAgo(track.timestamp);
+        return `
+            <div class="recent-track-item">
+                <div class="recent-track-info">
+                    <div class="recent-title">${escapeHtml(track.title)}</div>
+                    <div class="recent-artist">${escapeHtml(track.artist)} ${track.bitrate ? `• ${track.bitrate}` : ''}</div>
+                </div>
+                <div class="recent-time">${timeAgo}</div>
+            </div>
+        `;
+    }).join('');
+    
+    recentTracksList.innerHTML = html;
+}
+
+function getTimeAgo(timestamp) {
+    const now = new Date();
+    const diff = now - timestamp;
+    const minutes = Math.floor(diff / 60000);
+    
+    if (minutes < 1) return 'Now';
+    if (minutes === 1) return '1 min ago';
+    if (minutes < 60) return `${minutes} mins ago`;
+    
+    const hours = Math.floor(minutes / 60);
+    if (hours === 1) return '1 hour ago';
+    if (hours < 24) return `${hours} hours ago`;
+    
+    const days = Math.floor(hours / 24);
+    if (days === 1) return '1 day ago';
+    return `${days} days ago`;
+}
+
+function initializeMetadataWidget() {
+    // Initial display
+    updateCurrentTrackDisplay({});
+    updateRecentlyPlayedDisplay();
+    
+    console.log('🎵 Metadata widget initialized');
+}
+
+// Enhanced Metadata Fetching and Storage System
+class MetadataStorage {
+    constructor() {
+        this.storageKey = 'radioStreamMetadata';
+        this.maxEntries = 100;
+        this.loadFromStorage();
+    }
+
+    loadFromStorage() {
+        try {
+            const stored = localStorage.getItem(this.storageKey);
+            this.metadata = stored ? JSON.parse(stored) : [];
+        } catch (error) {
+            console.error('Error loading metadata from storage:', error);
+            this.metadata = [];
+        }
+    }
+
+    saveToStorage() {
+        try {
+            localStorage.setItem(this.storageKey, JSON.stringify(this.metadata));
+        } catch (error) {
+            console.error('Error saving metadata to storage:', error);
+        }
+    }
+
+    addEntry(metadata) {
+        const entry = {
+            id: Date.now() + Math.random(),
+            timestamp: new Date().toISOString(),
+            ...metadata
+        };
+
+        this.metadata.unshift(entry);
+        
+        // Keep only the latest entries
+        if (this.metadata.length > this.maxEntries) {
+            this.metadata = this.metadata.slice(0, this.maxEntries);
+        }
+
+        this.saveToStorage();
+        return entry;
+    }
+
+    getAll() {
+        return [...this.metadata];
+    }
+
+    getRecent(count = 10) {
+        return this.metadata.slice(0, count);
+    }
+
+    search(query) {
+        return this.metadata.filter(entry => 
+            JSON.stringify(entry).toLowerCase().includes(query.toLowerCase())
+        );
+    }
+
+    clear() {
+        this.metadata = [];
+        this.saveToStorage();
+    }
+
+    export() {
+        return {
+            exportDate: new Date().toISOString(),
+            totalEntries: this.metadata.length,
+            data: this.metadata
+        };
+    }
+}
+
+// Initialize metadata storage
+const metadataStorage = new MetadataStorage();
+
+// Enhanced metadata fetching functions
+async function fetchStreamMetadata() {
+    try {
+        const metadata = {
+            // Basic stream information
+            timestamp: new Date().toISOString(),
+            streamUrl: 'https://d3d4yli4hf5bmh.cloudfront.net/hls/live.m3u8',
+            
+            // Player state
+            currentTime: radioPlayer.currentTime,
+            duration: radioPlayer.duration,
+            volume: radioPlayer.volume,
+            muted: radioPlayer.muted,
+            paused: radioPlayer.paused,
+            playbackRate: radioPlayer.playbackRate,
+            
+            // Technical details
+            networkState: getNetworkStateText(radioPlayer.networkState),
+            readyState: getReadyStateText(radioPlayer.readyState),
+            videoWidth: radioPlayer.videoWidth || null,
+            videoHeight: radioPlayer.videoHeight || null,
+            
+            // Buffer information
+            buffered: getBufferedRanges(),
+            
+            // Connection info
+            connectionSpeed: await estimateConnectionSpeed(),
+            
+            // HLS specific data
+            hlsInfo: getHLSInfo(),
+            
+            // Browser and device info
+            browserInfo: getBrowserInfo(),
+            
+            // Stream quality metrics
+            qualityMetrics: await getQualityMetrics()
+        };
+
+        // Store the metadata
+        const storedEntry = metadataStorage.addEntry(metadata);
+        
+        // Update the UI
+        updateCurrentTrackDisplay(metadata);
+        
+        // Log the metadata
+        logMetadata(metadata);
+        
+        return storedEntry;
+        
+    } catch (error) {
+        console.error('Error fetching stream metadata:', error);
+        return null;
+    }
+}
+
+function getBufferedRanges() {
+    try {
+        const buffered = radioPlayer.buffered;
+        const ranges = [];
+        
+        for (let i = 0; i < buffered.length; i++) {
+            ranges.push({
+                start: buffered.start(i),
+                end: buffered.end(i),
+                duration: buffered.end(i) - buffered.start(i)
+            });
+        }
+        
+        return {
+            rangeCount: buffered.length,
+            ranges: ranges,
+            totalBuffered: ranges.reduce((total, range) => total + range.duration, 0)
+        };
+    } catch (error) {
+        return { error: error.message };
+    }
+}
+
+async function estimateConnectionSpeed() {
+    try {
+        if ('connection' in navigator) {
+            return {
+                effectiveType: navigator.connection.effectiveType,
+                downlink: navigator.connection.downlink,
+                rtt: navigator.connection.rtt,
+                saveData: navigator.connection.saveData
+            };
+        }
+        
+        // Fallback: estimate based on buffer fill time
+        const startTime = Date.now();
+        const initialBuffered = radioPlayer.buffered.length > 0 ? 
+            radioPlayer.buffered.end(radioPlayer.buffered.length - 1) : 0;
+        
+        return new Promise((resolve) => {
+            setTimeout(() => {
+                const endTime = Date.now();
+                const finalBuffered = radioPlayer.buffered.length > 0 ? 
+                    radioPlayer.buffered.end(radioPlayer.buffered.length - 1) : 0;
+                
+                const bufferGrowth = finalBuffered - initialBuffered;
+                const timeElapsed = (endTime - startTime) / 1000;
+                
+                resolve({
+                    estimatedSpeed: bufferGrowth / timeElapsed,
+                    method: 'buffer_growth_estimation'
+                });
+            }, 1000);
+        });
+        
+    } catch (error) {
+        return { error: error.message };
+    }
+}
+
+function getHLSInfo() {
+    try {
+        if (window.hlsInstance) {
+            const hls = window.hlsInstance;
+            return {
+                version: hls.constructor.version,
+                currentLevel: hls.currentLevel,
+                loadLevel: hls.loadLevel,
+                autoLevelEnabled: hls.autoLevelEnabled,
+                levels: hls.levels ? hls.levels.map(level => ({
+                    index: level.index,
+                    bitrate: level.bitrate,
+                    width: level.width,
+                    height: level.height,
+                    codecs: level.codecs,
+                    name: level.name
+                })) : [],
+                stats: {
+                    totalBytesLoaded: hls.stats?.total || 0,
+                    totalBytesDropped: hls.stats?.dropped || 0
+                }
+            };
+        }
+        return { native: true, message: 'Using native HLS support' };
+    } catch (error) {
+        return { error: error.message };
+    }
+}
+
+function getBrowserInfo() {
+    return {
+        userAgent: navigator.userAgent,
+        language: navigator.language,
+        cookieEnabled: navigator.cookieEnabled,
+        onLine: navigator.onLine,
+        platform: navigator.platform,
+        viewport: {
+            width: window.innerWidth,
+            height: window.innerHeight
+        },
+        screen: {
+            width: screen.width,
+            height: screen.height,
+            colorDepth: screen.colorDepth
+        }
+    };
+}
+
+async function getQualityMetrics() {
+    try {
+        const metrics = {
+            timestamp: Date.now(),
+            droppedFrames: 0,
+            decodedFrames: 0,
+            audioContext: null
+        };
+
+        // Try to get video quality metrics
+        if (radioPlayer.getVideoPlaybackQuality) {
+            const quality = radioPlayer.getVideoPlaybackQuality();
+            metrics.droppedFrames = quality.droppedVideoFrames || 0;
+            metrics.decodedFrames = quality.totalVideoFrames || 0;
+            metrics.corruptedFrames = quality.corruptedVideoFrames || 0;
+        }
+
+        // Try to get audio context info
+        if (window.AudioContext || window.webkitAudioContext) {
+            try {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                const audioContext = new AudioCtx();
+                metrics.audioContext = {
+                    sampleRate: audioContext.sampleRate,
+                    state: audioContext.state,
+                    baseLatency: audioContext.baseLatency || 0,
+                    outputLatency: audioContext.outputLatency || 0
+                };
+                audioContext.close();
+            } catch (audioError) {
+                metrics.audioContext = { error: audioError.message };
+            }
+        }
+
+        return metrics;
+    } catch (error) {
+        return { error: error.message };
+    }
+}
+
+function logMetadata(metadata) {
+    console.group('📊 Stream Metadata Captured');
+    console.log('Timestamp:', metadata.timestamp);
+    console.log('Stream State:', {
+        currentTime: metadata.currentTime,
+        paused: metadata.paused,
+        volume: Math.round(metadata.volume * 100) + '%',
+        networkState: metadata.networkState,
+        readyState: metadata.readyState
+    });
+    
+    if (metadata.hlsInfo && metadata.hlsInfo.levels) {
+        console.log('HLS Info:', {
+            currentLevel: metadata.hlsInfo.currentLevel,
+            availableLevels: metadata.hlsInfo.levels.length,
+            autoLevel: metadata.hlsInfo.autoLevelEnabled
+        });
+    }
+    
+    if (metadata.connectionSpeed && !metadata.connectionSpeed.error) {
+        console.log('Connection:', metadata.connectionSpeed);
+    }
+    
+    if (metadata.qualityMetrics && !metadata.qualityMetrics.error) {
+        console.log('Quality Metrics:', metadata.qualityMetrics);
+    }
+    
+    console.log('Buffer Info:', metadata.buffered);
+    console.groupEnd();
+}
+
+// API functions for metadata management
+window.getMetadataHistory = function(count = 10) {
+    return metadataStorage.getRecent(count);
+};
+
+window.searchMetadata = function(query) {
+    return metadataStorage.search(query);
+};
+
+window.exportMetadata = function() {
+    const data = metadataStorage.export();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `radio-metadata-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    return data;
+};
+
+window.clearMetadata = function() {
+    metadataStorage.clear();
+    console.log('🗑️ Metadata history cleared');
+};
+
+// Initialize metadata collection on radio player events
+function initializeMetadataCollection() {
+    if (!radioPlayer) {
+        console.warn('Radio player not available for metadata collection');
+        return;
+    }
+
+    console.log('🎯 Initializing metadata collection system...');
+
+    // Start periodic metadata collection
+    metadataCollectionInterval = setInterval(async () => {
+        if (!radioPlayer.paused && radioPlayer.readyState >= 2) {
+            await fetchStreamMetadata();
+        }
+    }, 30000); // Every 30 seconds
+
+    // Event-driven metadata collection
+    const metadataEvents = [
+        'loadstart', 'loadeddata', 'loadedmetadata', 'canplay', 'canplaythrough',
+        'play', 'pause', 'ended', 'error', 'stalled', 'waiting', 'seeking',
+        'seeked', 'ratechange', 'volumechange', 'progress'
+    ];
+
+    metadataEvents.forEach(eventType => {
+        radioPlayer.addEventListener(eventType, async (event) => {
+            console.log(`📡 Player event: ${eventType}`);
+            
+            // Collect metadata on significant events
+            if (['loadedmetadata', 'canplay', 'play', 'pause', 'error'].includes(eventType)) {
+                setTimeout(async () => {
+                    await fetchStreamMetadata();
+                }, 100); // Small delay to ensure state is updated
+            }
+        });
+    });
+
+    // HLS-specific events if available
+    if (window.hlsInstance) {
+        const hlsEvents = [
+            'MANIFEST_LOADED', 'LEVEL_LOADED', 'FRAG_LOADED', 'ERROR',
+            'LEVEL_SWITCHING', 'LEVEL_SWITCHED'
+        ];
+
+        hlsEvents.forEach(eventType => {
+            if (window.hlsInstance.constructor[eventType]) {
+                window.hlsInstance.on(window.hlsInstance.constructor[eventType], (event, data) => {
+                    console.log(`🎬 HLS event: ${eventType}`, data);
+                    
+                    // Collect metadata on important HLS events
+                    if (['MANIFEST_LOADED', 'LEVEL_SWITCHED', 'ERROR'].includes(eventType)) {
+                        setTimeout(async () => {
+                            await fetchStreamMetadata();
+                        }, 100);
+                    }
+                });
+            }
+        });
+    }
+
+    // Collect initial metadata
+    setTimeout(async () => {
+        await fetchStreamMetadata();
+    }, 1000);
+
+    console.log('✅ Metadata collection system initialized');
+}
+
+// Enhanced current track display with stored metadata
+function updateCurrentTrackDisplay(metadata) {
+    const currentTrackElement = document.getElementById('current-track');
+    if (!currentTrackElement) return;
+
+    const isPlaying = !metadata.paused;
+    const bufferHealth = getBufferHealth(metadata.buffered);
+    const qualityInfo = getQualityInfo(metadata);
+
+    currentTrackElement.innerHTML = `
+        <div class="track-status">
+            <span class="status-indicator ${isPlaying ? 'playing' : 'paused'}">
+                ${isPlaying ? '▶️' : '⏸️'}
+            </span>
+            <span class="track-title">Live Stream</span>
+        </div>
+        
+        <div class="track-details">
+            <div class="detail-row">
+                <span class="label">Status:</span>
+                <span class="value">${metadata.networkState} • ${metadata.readyState}</span>
+            </div>
+            
+            <div class="detail-row">
+                <span class="label">Buffer:</span>
+                <span class="value buffer-health ${bufferHealth.class}">
+                    ${bufferHealth.text}
+                </span>
+            </div>
+            
+            ${qualityInfo ? `
+                <div class="detail-row">
+                    <span class="label">Quality:</span>
+                    <span class="value">${qualityInfo}</span>
+                </div>
+            ` : ''}
+            
+            ${metadata.connectionSpeed && !metadata.connectionSpeed.error ? `
+                <div class="detail-row">
+                    <span class="label">Connection:</span>
+                    <span class="value">${getConnectionDisplay(metadata.connectionSpeed)}</span>
+                </div>
+            ` : ''}
+            
+            <div class="detail-row">
+                <span class="label">Time:</span>
+                <span class="value">${new Date(metadata.timestamp).toLocaleTimeString()}</span>
+            </div>
+        </div>
+    `;
+    
+    // Update recently played list
+    updateRecentlyPlayedList();
+}
+
+function getBufferHealth(bufferedInfo) {
+    if (!bufferedInfo || bufferedInfo.error) {
+        return { text: 'Unknown', class: 'unknown' };
+    }
+    
+    const totalBuffered = bufferedInfo.totalBuffered || 0;
+    
+    if (totalBuffered > 10) {
+        return { text: `${Math.round(totalBuffered)}s (Healthy)`, class: 'healthy' };
+    } else if (totalBuffered > 3) {
+        return { text: `${Math.round(totalBuffered)}s (Low)`, class: 'low' };
+    } else {
+        return { text: `${Math.round(totalBuffered)}s (Critical)`, class: 'critical' };
+    }
+}
+
+function getQualityInfo(metadata) {
+    if (metadata.hlsInfo && metadata.hlsInfo.levels && metadata.hlsInfo.currentLevel >= 0) {
+        const currentLevel = metadata.hlsInfo.levels[metadata.hlsInfo.currentLevel];
+        if (currentLevel) {
+            const bitrate = currentLevel.bitrate ? Math.round(currentLevel.bitrate / 1000) + 'k' : 'Unknown';
+            const resolution = (currentLevel.width && currentLevel.height) ? 
+                `${currentLevel.width}x${currentLevel.height}` : '';
+            return resolution ? `${bitrate} • ${resolution}` : bitrate;
+        }
+    }
+    return null;
+}
+
+function getConnectionDisplay(connectionInfo) {
+    if (connectionInfo.effectiveType) {
+        return connectionInfo.effectiveType.toUpperCase() + 
+               (connectionInfo.downlink ? ` (${connectionInfo.downlink}Mbps)` : '');
+    }
+    if (connectionInfo.estimatedSpeed) {
+        return `~${Math.round(connectionInfo.estimatedSpeed * 100) / 100}x`;
+    }
+    return 'Unknown';
+}
+
+function updateRecentlyPlayedList() {
+    const recentElement = document.getElementById('recently-played');
+    if (!recentElement) return;
+
+    const recentEntries = metadataStorage.getRecent(5);
+    
+    if (recentEntries.length === 0) {
+        recentElement.innerHTML = '<div class="no-recent">No recent listening history</div>';
+        return;
+    }
+
+    const recentHTML = recentEntries.map((entry, index) => {
+        const time = new Date(entry.timestamp).toLocaleTimeString();
+        const status = entry.paused ? 'Paused' : 'Playing';
+        const duration = index > 0 ? 
+            calculateListeningDuration(entry.timestamp, recentEntries[index - 1].timestamp) : 'Current';
+        
+        return `
+            <div class="recent-item ${index === 0 ? 'current' : ''}">
+                <div class="recent-time">${time}</div>
+                <div class="recent-status">${status}</div>
+                <div class="recent-duration">${duration}</div>
+                ${entry.hlsInfo && entry.hlsInfo.currentLevel >= 0 ? 
+                    `<div class="recent-quality">${getQualityInfo(entry) || 'Auto'}</div>` : ''
+                }
+            </div>
+        `;
+    }).join('');
+
+    recentElement.innerHTML = `
+        <div class="recent-header">Recent Sessions</div>
+        <div class="recent-list">${recentHTML}</div>
+    `;
+}
+
+function calculateListeningDuration(startTime, endTime) {
+    if (!endTime) return 'Current';
+    
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    const diffMs = Math.abs(end - start);
+    const diffMins = Math.round(diffMs / (1000 * 60));
+    
+    if (diffMins < 1) return '<1min';
+    if (diffMins < 60) return `${diffMins}min`;
+    
+    const hours = Math.floor(diffMins / 60);
+    const mins = diffMins % 60;
+    return `${hours}h ${mins}min`;
+}
+
+// Utility functions for network state text
+function getNetworkStateText(state) {
+    const states = {
+        0: 'EMPTY',
+        1: 'IDLE', 
+        2: 'LOADING',
+        3: 'NO_SOURCE'
+    };
+    return states[state] || `UNKNOWN(${state})`;
+}
+
+function getReadyStateText(state) {
+    const states = {
+        0: 'HAVE_NOTHING',
+        1: 'HAVE_METADATA',
+        2: 'HAVE_CURRENT_DATA',
+        3: 'HAVE_FUTURE_DATA',
+        4: 'HAVE_ENOUGH_DATA'
+    };
+    return states[state] || `UNKNOWN(${state})`;
+}
+
+// Initialize metadata collection when radio player is ready
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 DOM loaded, waiting for radio player...');
+    
+    // Wait for radio player to be initialized
+    const waitForRadioPlayer = setInterval(() => {
+        if (window.radioPlayer && window.radioPlayer.readyState >= 0) {
+            clearInterval(waitForRadioPlayer);
+            initializeMetadataCollection();
+        }
+    }, 500);
+    
+    // Timeout after 10 seconds
+    setTimeout(() => {
+        clearInterval(waitForRadioPlayer);
+        if (!window.radioPlayer) {
+            console.warn('⚠️ Radio player not found after 10 seconds');
+        }
+    }, 10000);
+});
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+    if (metadataCollectionInterval) {
+        clearInterval(metadataCollectionInterval);
+    }
+    
+    // Save final metadata snapshot
+    if (window.radioPlayer && !window.radioPlayer.paused) {
+        fetchStreamMetadata();
+    }
+});
