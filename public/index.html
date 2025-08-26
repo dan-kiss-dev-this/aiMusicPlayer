@@ -49,11 +49,17 @@
                     <div class="radio-container">
                         <h2>Live Stream</h2>
                         <div class="radio-player">
-                            <video id="radio-player" class="audio-player" controls preload="none">
+                            <!-- Album Art Display -->
+                            <div class="album-art-container">
+                                <img src="https://d3d4yli4hf5bmh.cloudfront.net/cover.jpg" 
+                                     alt="Album Art" class="album-art" id="album-art">
+                            </div>
+                            
+                            <audio id="radio-player" class="audio-player" controls preload="none">
                                 <source src="https://d3d4yli4hf5bmh.cloudfront.net/hls/live.m3u8"
                                     type="application/x-mpegURL">
                                 Your browser does not support HLS streaming.
-                            </video>
+                            </audio>
                             
                             <div class="stream-status">
                                 <div class="status-indicator">
@@ -71,10 +77,6 @@
                     <div class="now-playing-card">
                         <h3>Now Playing</h3>
                         <div class="track-display">
-                            <div class="album-art-container">
-                                <img src="https://d3d4yli4hf5bmh.cloudfront.net/cover.jpg" 
-                                     alt="Album Art" class="album-art" id="album-art">
-                            </div>
                             <div class="track-info">
                                 <h4 id="current-title" class="track-title">No track playing</h4>
                                 <p id="current-artist" class="track-artist">-</p>

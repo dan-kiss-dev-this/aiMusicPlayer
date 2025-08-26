@@ -302,6 +302,31 @@ main {
 
 .radio-player {
     margin-bottom: var(--baseline);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--baseline);
+}
+
+.radio-player .album-art-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: var(--baseline);
+}
+
+.radio-player .album-art {
+    width: 300px;
+    height: 300px;
+    border-radius: 12px;
+    object-fit: cover;
+    box-shadow: 0 8px 32px rgba(31, 78, 35, 0.3);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.radio-player .album-art:hover {
+    transform: scale(1.02);
+    box-shadow: 0 12px 40px rgba(31, 78, 35, 0.4);
 }
 
 .audio-player {
@@ -386,6 +411,7 @@ main {
     align-items: center;
     text-align: center;
     margin-bottom: calc(var(--baseline) * 1.5);
+    padding: var(--baseline);
 }
 
 .album-art-container {
@@ -682,20 +708,15 @@ main {
         gap: var(--gutter);
     }
     
+    .radio-player .album-art {
+        width: 200px;
+        height: 200px;
+    }
+    
     .track-display {
-        flex-direction: row;
-        text-align: left;
-        align-items: flex-start;
-    }
-    
-    .album-art-container {
-        margin-right: var(--baseline);
-        margin-bottom: 0;
-    }
-    
-    .album-art {
-        width: 80px;
-        height: 80px;
+        flex-direction: column;
+        text-align: center;
+        align-items: center;
     }
     
     .controls-grid {
@@ -709,35 +730,14 @@ main {
     /* Recent Songs Widget - Mobile */
     .recent-songs-widget {
         margin-top: var(--baseline);
-        padding-top: var(--baseline);
     }
-    
-    .recent-songs-list {
-        max-height: 200px;
-        gap: calc(var(--baseline) * 0.5);
-    }
-    
-    .recent-song-item {
-        padding: calc(var(--baseline) * 0.5);
-        gap: calc(var(--baseline) * 0.5);
-    }
-    
-    .recent-song-number {
-        width: 20px;
-        height: 20px;
-        font-size: 0.625rem;
-    }
-    
-    .recent-song-title {
-        font-size: 0.8rem;
-    }
-    
-    .recent-song-artist {
-        font-size: 0.7rem;
-    }
-    
-    .recent-song-time {
-        font-size: 0.7rem;
+}
+
+/* Extra small devices */
+@media (max-width: 480px) {
+    .radio-player .album-art {
+        width: 150px;
+        height: 150px;
     }
 }
 
