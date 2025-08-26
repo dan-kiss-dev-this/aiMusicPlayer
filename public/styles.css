@@ -490,6 +490,21 @@ footer p {
     margin-bottom: 1rem;
 }
 
+/* Make all text in metadata panel black with specific selectors */
+.metadata-panel h2,
+.metadata-panel h3,
+.metadata-panel .track-title,
+.metadata-panel .track-artist,
+.metadata-panel .track-album,
+.metadata-panel .track-duration,
+.metadata-panel .label,
+.metadata-panel .value,
+.metadata-panel .recent-title,
+.metadata-panel .recent-artist,
+.metadata-panel .recent-time {
+    color: #000000 !important;
+}
+
 .now-playing-widget {
     display: flex;
     flex-direction: column;
@@ -510,13 +525,13 @@ footer p {
 .track-title {
     font-size: 1.3rem;
     font-weight: 600;
-    color: #333;
+    color: #000000 !important;
     margin-bottom: 0.25rem;
 }
 
 .track-artist {
     font-size: 1.1rem;
-    color: #666;
+    color: #000000 !important;
     margin-bottom: 0.5rem;
 }
 
@@ -524,7 +539,7 @@ footer p {
     display: flex;
     gap: 1rem;
     font-size: 0.9rem;
-    color: #777;
+    color: #000000 !important;
     flex-wrap: wrap;
 }
 
@@ -554,17 +569,17 @@ footer p {
 
 .metadata-item .label {
     font-weight: 500;
-    color: #555;
+    color: #000000 !important;
 }
 
 .metadata-item .value {
-    color: #333;
+    color: #000000 !important;
     font-weight: 600;
 }
 
 .recently-played h3 {
     margin-bottom: 1rem;
-    color: #333;
+    color: #000000 !important;
     font-size: 1.1rem;
     font-weight: 600;
 }
@@ -597,18 +612,18 @@ footer p {
 
 .recent-title {
     font-weight: 500;
-    color: #333;
+    color: #000000 !important;
     font-size: 0.95rem;
     margin-bottom: 0.1rem;
 }
 
 .recent-artist {
-    color: #666;
+    color: #000000 !important;
     font-size: 0.85rem;
 }
 
 .recent-time {
-    color: #777;
+    color: #000000 !important;
     font-size: 0.8rem;
     white-space: nowrap;
     margin-left: 1rem;
