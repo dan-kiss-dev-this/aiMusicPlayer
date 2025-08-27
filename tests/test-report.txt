@@ -1,0 +1,14 @@
+Radio Calico Test Report
+=======================
+Generated: Wed Aug 27 15:27:23 PDT 2025
+Test Directory: /Users/danielkiss/Code/aiMusicPlayer/tests
+
+Test Results:
+============
+
+Environment:
+===========
+Node.js Version: v20.18.3
+npm Version: 10.8.2
+Operating System: Darwin
+
