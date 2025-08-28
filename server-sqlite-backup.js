@@ -14,7 +14,22 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-producti
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.urlen  try {
+    const result = await pool.query(
+      'DELETE FROM ratings WHERE user_id = $1 AND song_title = $2 AND song_artist = $3',
+      [user_id, song_title, song_artist]
+    );
+    
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: 'Rating not found' });
+    } else {
+      res.json({ message: 'Rating deleted successfully' });
+    }
+  } catch (error) {
+    console.error('Error deleting rating:', error);
+    res.status(500).json({ error: 'Error deleting rating' });
+  }
+}); true }));
 app.use(session({
   secret: JWT_SECRET,
   resave: false,
@@ -34,23 +49,18 @@ const pool = new Pool({
   port: process.env.DB_PORT || 5432,
 });
 
-// Test database connection and create tables
+// Test database connection
 pool.connect((err, client, release) => {
   if (err) {
     console.error('Error connecting to PostgreSQL:', err.message);
   } else {
     console.log('Connected to PostgreSQL database');
     release();
-
+    
     // Create tables if they don't exist
-    initializeTables();
-  }
-});
-
-async function initializeTables() {
-  try {
+    
     // Users table
-    await pool.query(`CREATE TABLE IF NOT EXISTS users (
+    pool.query(`CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       username VARCHAR(255) UNIQUE NOT NULL,
       email VARCHAR(255) UNIQUE NOT NULL,
@@ -60,9 +70,9 @@ async function initializeTables() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       last_login TIMESTAMP
     )`);
-
+    
     // Songs table
-    await pool.query(`CREATE TABLE IF NOT EXISTS songs (
+    pool.query(`CREATE TABLE IF NOT EXISTS songs (
       id SERIAL PRIMARY KEY,
       title VARCHAR(255) NOT NULL,
       artist VARCHAR(255) NOT NULL,
@@ -72,26 +82,26 @@ async function initializeTables() {
       user_id INTEGER REFERENCES users(id),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`);
-
+    
     // Playlists table
-    await pool.query(`CREATE TABLE IF NOT EXISTS playlists (
+    pool.query(`CREATE TABLE IF NOT EXISTS playlists (
       id SERIAL PRIMARY KEY,
       name VARCHAR(255) NOT NULL,
       description TEXT,
       user_id INTEGER REFERENCES users(id),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`);
-
+    
     // Playlist songs junction table
-    await pool.query(`CREATE TABLE IF NOT EXISTS playlist_songs (
+    pool.query(`CREATE TABLE IF NOT EXISTS playlist_songs (
       playlist_id INTEGER REFERENCES playlists(id),
       song_id INTEGER REFERENCES songs(id),
       position INTEGER,
       PRIMARY KEY (playlist_id, song_id)
     )`);
-
+    
     // Ratings table for thumbs up/down system
-    await pool.query(`CREATE TABLE IF NOT EXISTS ratings (
+    pool.query(`CREATE TABLE IF NOT EXISTS ratings (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id),
       song_title VARCHAR(255) NOT NULL,
@@ -100,13 +110,17 @@ async function initializeTables() {
       stream_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(user_id, song_title, song_artist)
-    )`);
-
+    )`, (err) => {
+      if (err) {
+        console.error('Error creating ratings table:', err.message);
+      } else {
+        console.log('✅ Ratings table created/verified successfully');
+      }
+    });
+    
     console.log('✅ Database tables initialized');
-  } catch (error) {
-    console.error('Error initializing tables:', error);
   }
-}
+});
 
 // Authentication middleware
 const authenticateToken = (req, res, next) => {
@@ -141,47 +155,47 @@ const optionalAuth = (req, res, next) => {
   next();
 };
 
-// Auth Routes
+// User Authentication Routes
 
-// Register a new user
+// Register new user
 app.post('/api/auth/register', async (req, res) => {
   const { username, email, password, firstName, lastName } = req.body;
-
+  
   if (!username || !email || !password) {
     return res.status(400).json({ error: 'Username, email, and password are required' });
   }
-
+  
   if (password.length < 6) {
     return res.status(400).json({ error: 'Password must be at least 6 characters long' });
   }
-
+  
   try {
     // Check if user already exists
     const existingUser = await pool.query('SELECT id FROM users WHERE username = $1 OR email = $2', [username, email]);
-
+    
     if (existingUser.rows.length > 0) {
       return res.status(409).json({ error: 'Username or email already exists' });
     }
-
+    
     // Hash password
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
-
+    
     // Insert new user
     const result = await pool.query(
       'INSERT INTO users (username, email, password_hash, first_name, last_name) VALUES ($1, $2, $3, $4, $5) RETURNING id',
       [username, email, passwordHash, firstName || null, lastName || null]
     );
-
+    
     const userId = result.rows[0].id;
-
+    
     // Generate JWT token
     const token = jwt.sign(
       { userId: userId, username: username },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
-
+    
     res.json({
       message: 'User registered successfully',
       user: {
@@ -201,41 +215,41 @@ app.post('/api/auth/register', async (req, res) => {
 // Login user
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
-
+  
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
   }
-
+  
   try {
     // Find user by username or email
     const result = await pool.query(
       'SELECT * FROM users WHERE username = $1 OR email = $2',
       [username, username]
     );
-
+    
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
-
+    
     const user = result.rows[0];
-
+    
     // Check password
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
-
+    
     if (!passwordMatch) {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
-
+    
     // Update last login
     await pool.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1', [user.id]);
-
+    
     // Generate JWT token
     const token = jwt.sign(
       { userId: user.id, username: user.username },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
-
+    
     res.json({
       message: 'Login successful',
       user: {
@@ -259,13 +273,13 @@ app.get('/api/auth/profile', authenticateToken, async (req, res) => {
       'SELECT id, username, email, first_name, last_name, created_at, last_login FROM users WHERE id = $1',
       [req.user.userId]
     );
-
+    
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
-
+    
     const user = result.rows[0];
-
+      
     res.json({
       user: {
         id: user.id,
@@ -301,7 +315,7 @@ app.get('/api/songs', optionalAuth, async (req, res) => {
   try {
     let query = 'SELECT * FROM songs';
     let params = [];
-
+    
     // If user is authenticated, show all songs but mark which are theirs
     if (req.user) {
       query = `SELECT *, CASE WHEN user_id = $1 THEN 1 ELSE 0 END as is_mine FROM songs ORDER BY created_at DESC`;
@@ -309,7 +323,7 @@ app.get('/api/songs', optionalAuth, async (req, res) => {
     } else {
       query = 'SELECT * FROM songs WHERE user_id IS NULL ORDER BY created_at DESC';
     }
-
+    
     const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (error) {
@@ -333,14 +347,14 @@ app.get('/api/songs/my', authenticateToken, async (req, res) => {
 // Add a new song
 app.post('/api/songs', optionalAuth, async (req, res) => {
   const { title, artist, album, duration, file_path } = req.body;
-
+  
   if (!title || !artist) {
     res.status(400).json({ error: 'Title and artist are required' });
     return;
   }
-
+  
   const userId = req.user ? req.user.userId : null;
-
+  
   try {
     const result = await pool.query(
       'INSERT INTO songs (title, artist, album, duration, file_path, user_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
@@ -357,7 +371,7 @@ app.get('/api/playlists', optionalAuth, async (req, res) => {
   try {
     let query = 'SELECT * FROM playlists';
     let params = [];
-
+    
     // If user is authenticated, show all playlists but mark which are theirs
     if (req.user) {
       query = `SELECT *, CASE WHEN user_id = $1 THEN 1 ELSE 0 END as is_mine FROM playlists ORDER BY created_at DESC`;
@@ -365,7 +379,7 @@ app.get('/api/playlists', optionalAuth, async (req, res) => {
     } else {
       query = 'SELECT * FROM playlists WHERE user_id IS NULL ORDER BY created_at DESC';
     }
-
+    
     const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (error) {
@@ -389,14 +403,14 @@ app.get('/api/playlists/my', authenticateToken, async (req, res) => {
 // Create a new playlist
 app.post('/api/playlists', optionalAuth, async (req, res) => {
   const { name, description } = req.body;
-
+  
   if (!name) {
     res.status(400).json({ error: 'Playlist name is required' });
     return;
   }
-
+  
   const userId = req.user ? req.user.userId : null;
-
+  
   try {
     const result = await pool.query(
       'INSERT INTO playlists (name, description, user_id) VALUES ($1, $2, $3) RETURNING id',
@@ -413,20 +427,24 @@ app.post('/api/playlists', optionalAuth, async (req, res) => {
 // Submit a rating (thumbs up = 1, thumbs down = -1)
 app.post('/api/ratings', authenticateToken, async (req, res) => {
   const { song_title, song_artist, rating } = req.body;
-  const user_id = req.user.userId;
+  const user_id = req.user.userId; // Fixed: use userId instead of id
 
   console.log('Rating submission request:', { user_id, song_title, song_artist, rating });
+  console.log('Full req.user object:', req.user);
 
   if (!song_title || !song_artist || rating === undefined || rating === null) {
+    console.log('Missing required fields:', { song_title, song_artist, rating });
     return res.status(400).json({ error: 'song_title, song_artist, and rating are required' });
   }
 
   if (rating !== 1 && rating !== -1) {
+    console.log('Invalid rating value:', rating);
     return res.status(400).json({ error: 'rating must be 1 (thumbs up) or -1 (thumbs down)' });
   }
 
   try {
     // Use ON CONFLICT to handle updating existing ratings
+    console.log('Attempting to insert rating into database...');
     await pool.query(
       `INSERT INTO ratings (user_id, song_title, song_artist, rating, stream_timestamp) 
        VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
@@ -434,8 +452,9 @@ app.post('/api/ratings', authenticateToken, async (req, res) => {
        DO UPDATE SET rating = EXCLUDED.rating, stream_timestamp = CURRENT_TIMESTAMP`,
       [user_id, song_title, song_artist, rating]
     );
-
-    res.json({
+    
+    console.log('Rating submitted successfully');
+    res.json({ 
       message: 'Rating submitted successfully',
       rating: rating === 1 ? 'thumbs_up' : 'thumbs_down'
     });
@@ -460,16 +479,16 @@ app.get('/api/ratings/:title/:artist', optionalAuth, async (req, res) => {
        WHERE song_title = $1 AND song_artist = $2`,
       [decodeURIComponent(title), decodeURIComponent(artist)]
     );
-
+    
     const stats = result.rows[0] || { thumbs_up: 0, thumbs_down: 0, total_ratings: 0 };
-
+    
     // If user is authenticated, get their rating for this song
     if (user_id) {
       const userRatingResult = await pool.query(
         `SELECT rating FROM ratings WHERE user_id = $1 AND song_title = $2 AND song_artist = $3`,
         [user_id, decodeURIComponent(title), decodeURIComponent(artist)]
       );
-
+      
       res.json({
         ...stats,
         user_rating: userRatingResult.rows[0]?.rating || null
@@ -485,7 +504,7 @@ app.get('/api/ratings/:title/:artist', optionalAuth, async (req, res) => {
 
 // Get user's rating history
 app.get('/api/ratings/my', authenticateToken, async (req, res) => {
-  const user_id = req.user.userId;
+  const user_id = req.user.userId; // Fixed: use userId instead of id
 
   try {
     const result = await pool.query(
@@ -505,27 +524,29 @@ app.get('/api/ratings/my', authenticateToken, async (req, res) => {
 // Delete a rating
 app.delete('/api/ratings', authenticateToken, async (req, res) => {
   const { song_title, song_artist } = req.body;
-  const user_id = req.user.userId;
+  const user_id = req.user.userId; // Fixed: use userId instead of id
 
   if (!song_title || !song_artist) {
     return res.status(400).json({ error: 'song_title and song_artist are required' });
   }
 
   try {
-    const result = await pool.query(
-      'DELETE FROM ratings WHERE user_id = $1 AND song_title = $2 AND song_artist = $3',
-      [user_id, song_title, song_artist]
-    );
-
-    if (result.rowCount === 0) {
-      res.status(404).json({ error: 'Rating not found' });
-    } else {
-      res.json({ message: 'Rating deleted successfully' });
+    `DELETE FROM ratings WHERE user_id = ? AND song_title = ? AND song_artist = ?`,
+    [user_id, song_title, song_artist],
+    function(err) {
+      if (err) {
+        console.error('Error deleting rating:', err);
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      
+      if (this.changes === 0) {
+        res.status(404).json({ error: 'Rating not found' });
+      } else {
+        res.json({ message: 'Rating deleted successfully' });
+      }
     }
-  } catch (error) {
-    console.error('Error deleting rating:', error);
-    res.status(500).json({ error: 'Error deleting rating' });
-  }
+  );
 });
 
 // Serve the main page
@@ -544,7 +565,27 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
+// Handle 404
+app.use((req, res) => {
+  res.status(404).json({ error: 'Route not found' });
+});
+
 // Start server
 app.listen(PORT, () => {
-  console.log(`🎵 Radio Calico server running on port ${PORT}`);
+  console.log(`🎵 AI Music Player server running on http://localhost:${PORT}`);
+  console.log(`📊 Health check: http://localhost:${PORT}/health`);
+  console.log(`🎶 API endpoints available at http://localhost:${PORT}/api/*`);
+});
+
+// Graceful shutdown
+process.on('SIGINT', () => {
+  console.log('\nShutting down server...');
+  db.close((err) => {
+    if (err) {
+      console.error(err.message);
+    } else {
+      console.log('Database connection closed');
+    }
+    process.exit(0);
+  });
 });

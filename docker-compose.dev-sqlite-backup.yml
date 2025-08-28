@@ -1,0 +1,60 @@
+# Docker Compose for Radio Calico Development
+version: '3.8'
+
+services:
+  radiocalico-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: radiocalico-dev
+    ports:
+      - "3000:3000"
+      - "9229:9229"  # Node.js debug port
+    volumes:
+      # Mount source code for hot reload
+      - .:/app
+      - /app/node_modules  # Prevent overwriting node_modules
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - NODE_ENV=development
+      - DEBUG=radiocalico:*
+      - DATABASE_PATH=/app/data/database.db
+    networks:
+      - radiocalico-network
+    restart: unless-stopped
+    stdin_open: true  # Keep container running for interactive debugging
+    tty: true
+
+  # SQLite database backup service
+  db-backup:
+    image: alpine:latest
+    container_name: radiocalico-db-backup
+    volumes:
+      - ./data:/data
+      - ./backups:/backups
+    environment:
+      - BACKUP_INTERVAL=3600  # Backup every hour
+    command: |
+      sh -c '
+        while true; do
+          if [ -f /data/database.db ]; then
+            cp /data/database.db /backups/database-$$(date +%Y%m%d-%H%M%S).db
+            # Keep only last 24 backups
+            ls -t /backups/database-*.db | tail -n +25 | xargs -r rm
+          fi
+          sleep $$BACKUP_INTERVAL
+        done
+      '
+    networks:
+      - radiocalico-network
+    restart: unless-stopped
+
+networks:
+  radiocalico-network:
+    driver: bridge
+
+volumes:
+  radiocalico-data:
+  radiocalico-logs:

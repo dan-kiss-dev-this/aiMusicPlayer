@@ -1,60 +1,58 @@
-# Docker Compose for Radio Calico Development
 version: '3.8'
 
 services:
   radiocalico-dev:
-    build:
+    build: 
       context: .
-      dockerfile: Dockerfile
       target: development
     container_name: radiocalico-dev
     ports:
       - "3000:3000"
-      - "9229:9229"  # Node.js debug port
-    volumes:
-      # Mount source code for hot reload
-      - .:/app
-      - /app/node_modules  # Prevent overwriting node_modules
-      - ./data:/app/data
-      - ./logs:/app/logs
     environment:
       - NODE_ENV=development
-      - DEBUG=radiocalico:*
-      - DATABASE_PATH=/app/data/database.db
-    networks:
-      - radiocalico-network
-    restart: unless-stopped
-    stdin_open: true  # Keep container running for interactive debugging
-    tty: true
-
-  # SQLite database backup service
-  db-backup:
-    image: alpine:latest
-    container_name: radiocalico-db-backup
+      - DB_HOST=postgres-dev
+      - DB_USER=postgres
+      - DB_PASSWORD=dev_password
+      - DB_NAME=radiocalico_dev
+      - DB_PORT=5432
+      - JWT_SECRET=dev-jwt-secret-key
     volumes:
-      - ./data:/data
-      - ./backups:/backups
-    environment:
-      - BACKUP_INTERVAL=3600  # Backup every hour
-    command: |
-      sh -c '
-        while true; do
-          if [ -f /data/database.db ]; then
-            cp /data/database.db /backups/database-$$(date +%Y%m%d-%H%M%S).db
-            # Keep only last 24 backups
-            ls -t /backups/database-*.db | tail -n +25 | xargs -r rm
-          fi
-          sleep $$BACKUP_INTERVAL
-        done
-      '
+      - .:/app
+      - /app/node_modules
+      - ./music:/app/music
+    depends_on:
+      - postgres-dev
     networks:
-      - radiocalico-network
-    restart: unless-stopped
+      - radiocalico-dev-network
+    command: npm run dev
+    healthcheck:
+      test: ["CMD", "node", "healthcheck.js"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-networks:
-  radiocalico-network:
-    driver: bridge
+  postgres-dev:
+    image: postgres:15-alpine
+    container_name: radiocalico-postgres-dev
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_DB=radiocalico_dev
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=dev_password
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    networks:
+      - radiocalico-dev-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
-  radiocalico-data:
-  radiocalico-logs:
+  postgres_dev_data:
+
+networks:
+  radiocalico-dev-network:
+    driver: bridge

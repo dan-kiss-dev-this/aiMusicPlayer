@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: radiocalico-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/simple.conf:/etc/nginx/conf.d/default.conf
+      - ./public:/var/www/html
+    depends_on:
+      - radiocalico
+    networks:
+      - radiocalico-network
+
+  radiocalico:
+    build: .
+    container_name: radiocalico-app
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=postgres
+      - DB_USER=postgres
+      - DB_PASSWORD=radiocalico_password
+      - DB_NAME=radiocalico
+      - DB_PORT=5432
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+    volumes:
+      - ./music:/app/music
+      - ./logs:/app/logs
+    depends_on:
+      - postgres
+    networks:
+      - radiocalico-network
+    healthcheck:
+      test: ["CMD", "node", "healthcheck.js"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: radiocalico-postgres
+    environment:
+      - POSTGRES_DB=radiocalico
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=radiocalico_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - radiocalico-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+
+networks:
+  radiocalico-network:
+    driver: bridge
