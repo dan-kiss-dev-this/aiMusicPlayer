@@ -6,6 +6,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const session = require('express-session');
 const path = require('path');
+const logger = require('./logger');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,6 +16,10 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-producti
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+
+// HTTP request logging middleware
+app.use(logger.httpLogger);
+
 app.use(session({
   secret: JWT_SECRET,
   resave: false,
@@ -37,9 +42,17 @@ const pool = new Pool({
 // Test database connection and create tables
 pool.connect((err, client, release) => {
   if (err) {
-    console.error('Error connecting to PostgreSQL:', err.message);
+    logger.error('Failed to connect to PostgreSQL', { 
+      error: err.message,
+      host: process.env.DB_HOST || 'localhost',
+      database: process.env.DB_NAME || 'radiocalico'
+    });
   } else {
-    console.log('Connected to PostgreSQL database');
+    logger.database('Successfully connected to PostgreSQL', {
+      host: process.env.DB_HOST || 'localhost',
+      database: process.env.DB_NAME || 'radiocalico',
+      port: process.env.DB_PORT || 5432
+    });
     release();
 
     // Create tables if they don't exist
@@ -102,9 +115,14 @@ async function initializeTables() {
       UNIQUE(user_id, song_title, song_artist)
     )`);
 
-    console.log('✅ Database tables initialized');
+    logger.database('Database tables initialized successfully', {
+      tables: ['users', 'songs', 'playlists', 'playlist_songs', 'ratings']
+    });
   } catch (error) {
-    console.error('Error initializing tables:', error);
+    logger.error('Failed to initialize database tables', { 
+      error: error.message,
+      stack: error.stack 
+    });
   }
 }
 
@@ -182,6 +200,14 @@ app.post('/api/auth/register', async (req, res) => {
       { expiresIn: '24h' }
     );
 
+    logger.auth('User registered successfully', {
+      userId: userId,
+      username: username,
+      email: email,
+      hasFirstName: !!firstName,
+      hasLastName: !!lastName
+    });
+
     res.json({
       message: 'User registered successfully',
       user: {
@@ -194,6 +220,11 @@ app.post('/api/auth/register', async (req, res) => {
       token: token
     });
   } catch (error) {
+    logger.error('User registration failed', {
+      error: error.message,
+      username: username,
+      email: email
+    });
     res.status(500).json({ error: 'Error creating user' });
   }
 });
@@ -236,6 +267,12 @@ app.post('/api/auth/login', async (req, res) => {
       { expiresIn: '24h' }
     );
 
+    logger.auth('User login successful', {
+      userId: user.id,
+      username: user.username,
+      email: user.email
+    });
+
     res.json({
       message: 'Login successful',
       user: {
@@ -248,6 +285,10 @@ app.post('/api/auth/login', async (req, res) => {
       token: token
     });
   } catch (error) {
+    logger.error('User login failed', {
+      error: error.message,
+      username: username
+    });
     res.status(500).json({ error: 'Error during login' });
   }
 });
@@ -415,13 +456,26 @@ app.post('/api/ratings', authenticateToken, async (req, res) => {
   const { song_title, song_artist, rating } = req.body;
   const user_id = req.user.userId;
 
-  console.log('Rating submission request:', { user_id, song_title, song_artist, rating });
+  logger.api('Rating submission received', { 
+    userId: user_id, 
+    songTitle: song_title, 
+    songArtist: song_artist, 
+    rating: rating 
+  });
 
   if (!song_title || !song_artist || rating === undefined || rating === null) {
+    logger.security('Invalid rating submission - missing fields', {
+      userId: user_id,
+      provided: { song_title: !!song_title, song_artist: !!song_artist, rating: rating !== undefined }
+    });
     return res.status(400).json({ error: 'song_title, song_artist, and rating are required' });
   }
 
   if (rating !== 1 && rating !== -1) {
+    logger.security('Invalid rating submission - invalid rating value', {
+      userId: user_id,
+      rating: rating
+    });
     return res.status(400).json({ error: 'rating must be 1 (thumbs up) or -1 (thumbs down)' });
   }
 
@@ -440,7 +494,14 @@ app.post('/api/ratings', authenticateToken, async (req, res) => {
       rating: rating === 1 ? 'thumbs_up' : 'thumbs_down'
     });
   } catch (error) {
-    console.error('Database error submitting rating:', error);
+    logger.database('Database error submitting rating', {
+      error: error.message,
+      stack: error.stack,
+      user_id: req.user?.userId,
+      title,
+      artist,
+      rating
+    });
     res.status(500).json({ error: 'Database error: ' + error.message });
   }
 });
@@ -478,7 +539,13 @@ app.get('/api/ratings/:title/:artist', optionalAuth, async (req, res) => {
       res.json(stats);
     }
   } catch (error) {
-    console.error('Error getting ratings:', error);
+    logger.database('Error getting ratings', {
+      error: error.message,
+      stack: error.stack,
+      title,
+      artist,
+      user_id
+    });
     res.status(500).json({ error: 'Error fetching ratings' });
   }
 });
@@ -497,7 +564,11 @@ app.get('/api/ratings/my', authenticateToken, async (req, res) => {
     );
     res.json(result.rows);
   } catch (error) {
-    console.error('Error getting user ratings:', error);
+    logger.database('Error getting user ratings', {
+      error: error.message,
+      stack: error.stack,
+      user_id
+    });
     res.status(500).json({ error: 'Error fetching user ratings' });
   }
 });
@@ -523,7 +594,13 @@ app.delete('/api/ratings', authenticateToken, async (req, res) => {
       res.json({ message: 'Rating deleted successfully' });
     }
   } catch (error) {
-    console.error('Error deleting rating:', error);
+    logger.database('Error deleting rating', {
+      error: error.message,
+      stack: error.stack,
+      user_id,
+      song_title,
+      song_artist
+    });
     res.status(500).json({ error: 'Error deleting rating' });
   }
 });
@@ -540,11 +617,22 @@ app.get('/health', (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  logger.error('Unhandled application error', {
+    error: err.message,
+    stack: err.stack,
+    url: req.url,
+    method: req.method,
+    ip: req.ip,
+    userAgent: req.get('User-Agent')
+  });
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`🎵 Radio Calico server running on port ${PORT}`);
+  logger.info('Radio Calico server started', {
+    port: PORT,
+    environment: process.env.NODE_ENV || 'development',
+    timestamp: new Date().toISOString()
+  });
 });
