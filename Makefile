@@ -80,6 +80,82 @@ test-integration: ## Run integration tests
 	@echo "🔗 Running integration tests..."
 	@cd tests && npm run test:integration
 
+##@ Security
+security: ## Run comprehensive security scan
+	@echo "🛡️ Running comprehensive security scan..."
+	@./scripts/security-scan.sh
+
+security-audit: ## Run npm audit on main dependencies
+	@echo "🔍 Running security audit on main dependencies..."
+	@npm run audit
+
+security-audit-fix: ## Automatically fix security vulnerabilities
+	@echo "🔧 Fixing security vulnerabilities..."
+	@npm run audit:fix
+	@cd tests && npm run security:fix || true
+	@echo "✅ Security fixes applied"
+
+security-audit-tests: ## Run npm audit on test dependencies
+	@echo "🔍 Running security audit on test dependencies..."
+	@cd tests && npm run security:audit
+
+security-check-deps: ## Check for outdated dependencies
+	@echo "📦 Checking for outdated dependencies..."
+	@echo "Main dependencies:"
+	@npm run security:check-deps
+	@echo ""
+	@echo "Test dependencies:"
+	@cd tests && npm run security:deps
+
+security-report: ## Generate detailed security reports
+	@echo "📋 Generating security reports..."
+	@npm run security:report
+	@cd tests && npm run security:report
+	@echo "✅ Security reports generated"
+
+security-docker: ## Scan Docker images for vulnerabilities (requires trivy)
+	@echo "🐳 Scanning Docker images for security vulnerabilities..."
+	@if command -v docker >/dev/null 2>&1; then \
+		if docker image inspect aimusicplayer-radiocalico-dev >/dev/null 2>&1; then \
+			echo "Scanning development image..."; \
+			docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image aimusicplayer-radiocalico-dev || echo "⚠️ Install trivy for Docker scanning"; \
+		else \
+			echo "⚠️ Development image not found"; \
+		fi; \
+		if docker image inspect aimusicplayer-radiocalico >/dev/null 2>&1; then \
+			echo "Scanning production image..."; \
+			docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image aimusicplayer-radiocalico || echo "⚠️ Install trivy for Docker scanning"; \
+		else \
+			echo "⚠️ Production image not found"; \
+		fi; \
+	else \
+		echo "⚠️ Docker not available"; \
+	fi
+
+security-quick: ## Quick security check (audit + outdated packages)
+	@echo "⚡ Quick security check..."
+	@make security-audit || true
+	@make security-check-deps
+	@echo "✅ Quick security check completed"
+
+security-ci: ## Run security audit for CI/CD pipeline
+	@echo "🤖 Running CI security audit..."
+	@./scripts/ci-security-audit.sh
+
+security-fix-all: ## Fix all security issues automatically
+	@echo "🔧 Fixing all security issues..."
+	@npm run audit:fix
+	@cd tests && npm run security:fix || true
+	@npm update
+	@cd tests && npm update || true
+	@echo "✅ All security fixes applied"
+
+security-clean: ## Clean old security reports
+	@echo "🧹 Cleaning old security reports..."
+	@find security-reports -name "*.txt" -mtime +30 -delete 2>/dev/null || true
+	@find security-reports -name "*.json" -mtime +30 -delete 2>/dev/null || true
+	@echo "✅ Old security reports cleaned"
+
 ##@ Database
 db-init: ## Initialize database tables
 	@echo "🗄️ Initializing database..."
@@ -158,11 +234,24 @@ quick-test: ## Quick test: run tests and show results
 	@make test
 	@echo "✅ Tests completed"
 
+quick-security: ## Quick security scan and fix
+	@make security-quick
+	@make security-audit-fix
+	@echo "✅ Security scan and fixes completed"
+
 quick-prod: ## Quick start: production with health check
 	@make prod-daemon
 	@sleep 10
 	@make health
 	@echo "✅ Production environment ready"
+
+quick-full-check: ## Full check: tests, security, and health
+	@echo "🔄 Running comprehensive system check..."
+	@make install
+	@make test
+	@make security-quick
+	@make health
+	@echo "✅ Full system check completed"
 
 ##@ Development Tools
 shell-dev: ## Open shell in development container

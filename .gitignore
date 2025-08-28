@@ -159,3 +159,4 @@ yarn.lock
 # Backup files
 *.backup
 *.bak
+security-reports/

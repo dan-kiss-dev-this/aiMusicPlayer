@@ -10,7 +10,12 @@
     "test:frontend": "jest frontend-ratings.test.js",
     "test:integration": "jest ratings-integration.test.js",
     "test:all": "jest *.test.js",
-    "test:verbose": "jest --verbose"
+    "test:verbose": "jest --verbose",
+    "security:audit": "npm audit --audit-level moderate",
+    "security:fix": "npm audit fix",
+    "security:scan": "npm audit && npm run security:deps",
+    "security:deps": "npm outdated || true",
+    "security:report": "npm audit --json > security-audit-tests.json"
   },
   "devDependencies": {
     "jest": "^29.7.0",
