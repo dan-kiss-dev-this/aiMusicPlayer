@@ -1,6 +1,6 @@
 # Radio Calico Makefile Guide
 
-This project includes a comprehensive Makefile that provides convenient commands for development, production, and testing workflows.
+This project includes a comprehensive Makefile that provides convenient commands for development, production, testing, and security workflows.
 
 ## Quick Start
 
@@ -13,6 +13,9 @@ make dev
 
 # Run tests
 make test
+
+# Run security scan
+make security
 
 # Check application health
 make health
@@ -73,6 +76,27 @@ make test-watch
 make test-backend
 make test-frontend
 make test-integration
+```
+
+### Security Workflow
+```bash
+# Run comprehensive security scan
+make security
+
+# Quick security audit
+make security-quick
+
+# Fix security vulnerabilities automatically
+make security-audit-fix
+
+# Generate security reports
+make security-report
+
+# Check for outdated dependencies
+make security-check-deps
+
+# Run CI security audit
+make security-ci
 ```
 
 ## Development Tools
@@ -158,9 +182,10 @@ DB_PASSWORD=secure_password make prod
 - **Development**: `dev`, `dev-daemon`, `dev-stop`, `dev-restart`, `dev-logs`
 - **Production**: `prod`, `prod-daemon`, `prod-stop`, `prod-restart`, `prod-logs`
 - **Testing**: `test`, `test-watch`, `test-coverage`, `test-backend`, `test-frontend`, `test-integration`
+- **Security**: `security`, `security-audit`, `security-fix`, `security-quick`, `security-ci`, `security-report`
 - **Database**: `db-init`, `db-backup`, `db-backup-dev`
 - **Utilities**: `install`, `clean`, `logs`, `health`, `status`
-- **Quick Actions**: `quick-dev`, `quick-test`, `quick-prod`
+- **Quick Actions**: `quick-dev`, `quick-test`, `quick-prod`, `quick-security`, `quick-full-check`
 - **Development Tools**: `shell-dev`, `shell-prod`, `shell-db`, `rebuild`
 - **Information**: `version`, `env`, `help`
 
@@ -185,7 +210,16 @@ make prod-logs      # Monitor startup logs
 ```bash
 make install        # Ensure dependencies are installed
 make test-coverage  # Run tests with coverage report
+make security       # Run security scan
 make logs           # Check for any issues in logs
+```
+
+### Security maintenance
+```bash
+make security       # Full security scan
+make security-fix   # Fix vulnerabilities automatically
+make security-report # Generate detailed reports
+make db-backup      # Backup before security updates
 ```
 
 ### Debug issues
@@ -193,6 +227,32 @@ make logs           # Check for any issues in logs
 make status         # Check container status
 make logs-errors    # Look for error messages
 make shell-dev      # Get shell access to investigate
+make health         # Check application health
 ```
 
 All commands are designed to be safe and provide helpful output. The Makefile includes proper error handling and informative messages to guide you through each operation.
+
+## Additional Documentation
+
+- **[README.md](README.md)** - Main project documentation
+- **[API.md](API.md)** - Complete API reference
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Deployment guide for all environments
+- **[CHANGELOG.md](CHANGELOG.md)** - Version history and migration guide
+- **[.security.yml](.security.yml)** - Security configuration reference
+
+## Quick Reference Card
+
+```bash
+# Essential commands for daily development
+make dev          # Start development
+make test         # Run tests  
+make security     # Security scan
+make health       # Check status
+make logs         # View logs
+make clean        # Clean up
+
+# Production deployment
+make prod-daemon  # Deploy production
+make db-backup    # Backup database
+make status       # Check containers
+```
