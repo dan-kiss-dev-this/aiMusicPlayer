@@ -1,6 +1,6 @@
 # AI Music Player
 
-A local development environment for prototyping an AI Music Player web application.
+A local development environment for prototyping an AI Music Player web application. See below. here
 
 ## Tech Stack
 
