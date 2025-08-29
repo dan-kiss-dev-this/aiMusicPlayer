@@ -1,0 +1,549 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened]
+
+env:
+  NODE_VERSION: '18'
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  # Basic file and format validation
+  basic-validation:
+    name: Basic Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate file structure
+        run: |
+          echo "🔍 Validating basic file structure..."
+          
+          # Check required files exist
+          REQUIRED_FILES=(
+            "package.json"
+            "server.js"
+            "README.md"
+            ".gitignore"
+          )
+          
+          MISSING_FILES=()
+          for file in "${REQUIRED_FILES[@]}"; do
+            if [ ! -f "$file" ]; then
+              MISSING_FILES+=("$file")
+            fi
+          done
+          
+          if [ ${#MISSING_FILES[@]} -gt 0 ]; then
+            echo "❌ Missing required files:"
+            printf '  - %s\n' "${MISSING_FILES[@]}"
+            exit 1
+          fi
+          
+          echo "✅ All required files present"
+
+      - name: Validate JSON files
+        run: |
+          echo "🔍 Validating JSON syntax..."
+          
+          # Find and validate all JSON files
+          JSON_FILES=$(find . -name "*.json" -not -path "./node_modules/*" -not -path "./.git/*")
+          
+          INVALID_JSON=()
+          for file in $JSON_FILES; do
+            if ! jq empty "$file" 2>/dev/null; then
+              INVALID_JSON+=("$file")
+            fi
+          done
+          
+          if [ ${#INVALID_JSON[@]} -gt 0 ]; then
+            echo "❌ Invalid JSON files found:"
+            printf '  - %s\n' "${INVALID_JSON[@]}"
+            exit 1
+          fi
+          
+          echo "✅ All JSON files are valid"
+
+      - name: Validate YAML files
+        run: |
+          echo "🔍 Validating YAML syntax..."
+          
+          # Install yq for YAML validation
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          
+          # Find and validate all YAML files
+          YAML_FILES=$(find . -name "*.yml" -o -name "*.yaml" -not -path "./node_modules/*" -not -path "./.git/*")
+          
+          INVALID_YAML=()
+          for file in $YAML_FILES; do
+            if ! yq eval '.' "$file" >/dev/null 2>&1; then
+              INVALID_YAML+=("$file")
+            fi
+          done
+          
+          if [ ${#INVALID_YAML[@]} -gt 0 ]; then
+            echo "❌ Invalid YAML files found:"
+            printf '  - %s\n' "${INVALID_YAML[@]}"
+            exit 1
+          fi
+          
+          echo "✅ All YAML files are valid"
+
+      - name: Check for large files
+        run: |
+          echo "🔍 Checking for large files..."
+          
+          # Find files larger than 10MB
+          LARGE_FILES=$(find . -size +10M -not -path "./node_modules/*" -not -path "./.git/*" -type f)
+          
+          if [ -n "$LARGE_FILES" ]; then
+            echo "⚠️ Large files found (>10MB):"
+            echo "$LARGE_FILES" | while read -r file; do
+              size=$(du -h "$file" | cut -f1)
+              echo "  - $file ($size)"
+            done
+            echo "Consider using Git LFS for large files"
+          else
+            echo "✅ No large files found"
+          fi
+
+      - name: Check for sensitive data patterns
+        run: |
+          echo "🔍 Scanning for potential sensitive data..."
+          
+          SENSITIVE_PATTERNS=(
+            "password.*=.*['\"][^'\"]*['\"]"
+            "secret.*=.*['\"][^'\"]*['\"]"
+            "api.*key.*=.*['\"][^'\"]*['\"]"
+            "token.*=.*['\"][^'\"]*['\"]"
+          )
+          
+          SENSITIVE_FOUND=()
+          for pattern in "${SENSITIVE_PATTERNS[@]}"; do
+            if grep -r -i --exclude-dir=node_modules --exclude-dir=.git \
+              --exclude="*.test.js" --exclude="*.spec.js" \
+              "$pattern" . > /dev/null 2>&1; then
+              SENSITIVE_FOUND+=("$pattern")
+            fi
+          done
+          
+          if [ ${#SENSITIVE_FOUND[@]} -gt 0 ]; then
+            echo "⚠️ Potential sensitive data patterns found:"
+            printf '  - %s\n' "${SENSITIVE_FOUND[@]}"
+            echo "Please review and ensure no actual secrets are committed"
+          else
+            echo "✅ No sensitive data patterns detected"
+          fi
+
+  # Package validation
+  package-validation:
+    name: Package Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Validate package.json
+        run: |
+          echo "🔍 Validating package.json..."
+          
+          # Check required fields
+          REQUIRED_FIELDS=("name" "version" "description" "main" "scripts")
+          
+          for field in "${REQUIRED_FIELDS[@]}"; do
+            if ! jq -e ".$field" package.json >/dev/null; then
+              echo "❌ Missing required field: $field"
+              exit 1
+            fi
+          done
+          
+          # Check if start script exists
+          if ! jq -e '.scripts.start' package.json >/dev/null; then
+            echo "⚠️ No start script defined in package.json"
+          fi
+          
+          echo "✅ package.json structure is valid"
+
+      - name: Install dependencies
+        run: |
+          echo "📦 Installing dependencies..."
+          npm ci
+
+      - name: Check for dependency vulnerabilities
+        run: |
+          echo "🔒 Checking for security vulnerabilities..."
+          npm audit --audit-level=moderate
+
+      - name: Validate test dependencies
+        if: hashFiles('tests/package.json')
+        run: |
+          echo "🧪 Validating test dependencies..."
+          cd tests
+          npm ci
+          npm audit --audit-level=moderate
+
+  # Code quality validation
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: JavaScript syntax validation
+        run: |
+          echo "🔍 Validating JavaScript syntax..."
+          
+          # Find all JS files
+          JS_FILES=$(find . -name "*.js" -not -path "./node_modules/*" -not -path "./.git/*")
+          
+          SYNTAX_ERRORS=()
+          for file in $JS_FILES; do
+            if ! node -c "$file" 2>/dev/null; then
+              SYNTAX_ERRORS+=("$file")
+            fi
+          done
+          
+          if [ ${#SYNTAX_ERRORS[@]} -gt 0 ]; then
+            echo "❌ JavaScript syntax errors found:"
+            printf '  - %s\n' "${SYNTAX_ERRORS[@]}"
+            exit 1
+          fi
+          
+          echo "✅ All JavaScript files have valid syntax"
+
+      - name: Check for TODO/FIXME comments
+        run: |
+          echo "🔍 Checking for TODO/FIXME comments..."
+          
+          TODO_COUNT=$(grep -r -i "TODO\|FIXME" --include="*.js" --include="*.json" --include="*.md" . | wc -l)
+          
+          if [ "$TODO_COUNT" -gt 0 ]; then
+            echo "📝 Found $TODO_COUNT TODO/FIXME comments:"
+            grep -r -i "TODO\|FIXME" --include="*.js" --include="*.json" --include="*.md" . | head -10
+            if [ "$TODO_COUNT" -gt 10 ]; then
+              echo "... and $((TODO_COUNT - 10)) more"
+            fi
+            echo "Consider addressing these before merging"
+          else
+            echo "✅ No TODO/FIXME comments found"
+          fi
+
+      - name: Check code formatting
+        run: |
+          echo "🔍 Checking code formatting..."
+          
+          # Check if prettier is configured
+          if [ -f ".prettierrc" ] || [ -f "prettier.config.js" ]; then
+            echo "Running Prettier check..."
+            npx prettier --check . || {
+              echo "❌ Code formatting issues found"
+              echo "Run 'npx prettier --write .' to fix formatting"
+              exit 1
+            }
+          else
+            echo "⚠️ No Prettier configuration found"
+            echo "Consider adding Prettier for consistent code formatting"
+          fi
+
+  # Basic functionality validation
+  functionality-validation:
+    name: Functionality Validation
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: radiocalico_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+
+      - name: Basic application startup test
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: postgres
+          DB_PASSWORD: test_password
+          DB_NAME: radiocalico_test
+          JWT_SECRET: test-secret
+        run: |
+          echo "🚀 Testing basic application startup..."
+          
+          # Start the application in background
+          timeout 30s node server.js &
+          APP_PID=$!
+          
+          # Wait for application to start
+          sleep 10
+          
+          # Test if application responds
+          if curl -f http://localhost:3000/health >/dev/null 2>&1; then
+            echo "✅ Application starts and responds to health check"
+          else
+            echo "❌ Application failed to start or health check failed"
+            # Show logs for debugging
+            echo "Application logs:"
+            cat server.log 2>/dev/null || echo "No server logs found"
+            exit 1
+          fi
+          
+          # Cleanup
+          kill $APP_PID 2>/dev/null || true
+
+      - name: Run basic tests
+        if: hashFiles('tests/package.json')
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: postgres
+          DB_PASSWORD: test_password
+          DB_NAME: radiocalico_test
+          JWT_SECRET: test-secret
+        run: |
+          echo "🧪 Running basic tests..."
+          cd tests
+          npm ci
+          npm test
+
+  # Docker validation
+  docker-validation:
+    name: Docker Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Validate Dockerfile
+        run: |
+          echo "🐳 Validating Dockerfile..."
+          
+          if [ -f "Dockerfile" ]; then
+            # Check Dockerfile syntax
+            docker build --dry-run . >/dev/null 2>&1 || {
+              echo "❌ Dockerfile syntax errors found"
+              exit 1
+            }
+            echo "✅ Dockerfile syntax is valid"
+          else
+            echo "⚠️ No Dockerfile found"
+          fi
+
+      - name: Validate docker-compose files
+        run: |
+          echo "🐳 Validating docker-compose files..."
+          
+          COMPOSE_FILES=$(find . -name "docker-compose*.yml" -not -path "./node_modules/*")
+          
+          for file in $COMPOSE_FILES; do
+            echo "Validating $file..."
+            docker-compose -f "$file" config >/dev/null || {
+              echo "❌ Invalid docker-compose file: $file"
+              exit 1
+            }
+          done
+          
+          echo "✅ All docker-compose files are valid"
+
+      - name: Test Docker build
+        if: hashFiles('Dockerfile')
+        run: |
+          echo "🐳 Testing Docker build..."
+          docker build -t test-build . || {
+            echo "❌ Docker build failed"
+            exit 1
+          }
+          echo "✅ Docker build successful"
+
+  # Documentation validation
+  documentation-validation:
+    name: Documentation Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate README
+        run: |
+          echo "📚 Validating README.md..."
+          
+          if [ ! -f "README.md" ]; then
+            echo "❌ README.md is missing"
+            exit 1
+          fi
+          
+          # Check minimum README content
+          REQUIRED_SECTIONS=("# " "## ")
+          
+          for section in "${REQUIRED_SECTIONS[@]}"; do
+            if ! grep -q "$section" README.md; then
+              echo "⚠️ README.md might be missing proper headings"
+              break
+            fi
+          done
+          
+          # Check README length
+          WORD_COUNT=$(wc -w < README.md)
+          if [ "$WORD_COUNT" -lt 50 ]; then
+            echo "⚠️ README.md is quite short ($WORD_COUNT words)"
+            echo "Consider adding more documentation"
+          fi
+          
+          echo "✅ README.md exists and has content"
+
+      - name: Check for API documentation
+        run: |
+          echo "📚 Checking for API documentation..."
+          
+          API_DOCS=$(find . -name "*API*" -o -name "*api*" -name "*.md" -not -path "./node_modules/*")
+          
+          if [ -n "$API_DOCS" ]; then
+            echo "✅ API documentation found:"
+            echo "$API_DOCS"
+          else
+            echo "⚠️ No API documentation found"
+            echo "Consider adding API documentation"
+          fi
+
+  # Summary validation
+  validation-summary:
+    name: Validation Summary
+    runs-on: ubuntu-latest
+    needs: [basic-validation, package-validation, code-quality, functionality-validation, docker-validation, documentation-validation]
+    if: always()
+    
+    steps:
+      - name: Generate validation summary
+        run: |
+          echo "## 🔍 PR Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Validation Type | Status | Details |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------------|--------|---------|" >> $GITHUB_STEP_SUMMARY
+          
+          # Basic validation
+          if [[ "${{ needs.basic-validation.result }}" == "success" ]]; then
+            echo "| Basic | ✅ Passed | File structure and format validation passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Basic | ❌ Failed | File structure or format issues found |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Package validation
+          if [[ "${{ needs.package-validation.result }}" == "success" ]]; then
+            echo "| Package | ✅ Passed | Dependencies and package.json validation passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Package | ❌ Failed | Package or dependency issues found |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Code quality
+          if [[ "${{ needs.code-quality.result }}" == "success" ]]; then
+            echo "| Code Quality | ✅ Passed | Code syntax and quality checks passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Code Quality | ❌ Failed | Code quality issues found |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Functionality
+          if [[ "${{ needs.functionality-validation.result }}" == "success" ]]; then
+            echo "| Functionality | ✅ Passed | Application startup and basic tests passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Functionality | ❌ Failed | Application or test failures detected |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Docker
+          if [[ "${{ needs.docker-validation.result }}" == "success" ]]; then
+            echo "| Docker | ✅ Passed | Docker configuration validation passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Docker | ❌ Failed | Docker configuration issues found |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Documentation
+          if [[ "${{ needs.documentation-validation.result }}" == "success" ]]; then
+            echo "| Documentation | ✅ Passed | Documentation validation passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Documentation | ❌ Failed | Documentation issues found |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Overall status
+          FAILED_JOBS=0
+          if [[ "${{ needs.basic-validation.result }}" != "success" ]]; then ((FAILED_JOBS++)); fi
+          if [[ "${{ needs.package-validation.result }}" != "success" ]]; then ((FAILED_JOBS++)); fi
+          if [[ "${{ needs.code-quality.result }}" != "success" ]]; then ((FAILED_JOBS++)); fi
+          if [[ "${{ needs.functionality-validation.result }}" != "success" ]]; then ((FAILED_JOBS++)); fi
+          if [[ "${{ needs.docker-validation.result }}" != "success" ]]; then ((FAILED_JOBS++)); fi
+          if [[ "${{ needs.documentation-validation.result }}" != "success" ]]; then ((FAILED_JOBS++)); fi
+          
+          if [ $FAILED_JOBS -eq 0 ]; then
+            echo "🎉 **All validations passed!** Your PR is ready for review." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ **$FAILED_JOBS validation(s) failed.** Please address the issues above before merging." >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Next Steps:**" >> $GITHUB_STEP_SUMMARY
+          echo "1. Review any failed validations above" >> $GITHUB_STEP_SUMMARY
+          echo "2. Fix identified issues" >> $GITHUB_STEP_SUMMARY
+          echo "3. Push updates to trigger re-validation" >> $GITHUB_STEP_SUMMARY
+          echo "4. Request code review when all validations pass" >> $GITHUB_STEP_SUMMARY
