@@ -10,7 +10,7 @@ I've successfully designed and implemented a comprehensive unit testing framewor
 - ✅ **200+ lines** of comprehensive backend testing
 - ✅ **Authentication testing** with JWT tokens
 - ✅ **API endpoint testing** for POST/GET ratings
-- ✅ **Database operations** with in-memory SQLite
+- ✅ **Database operations** with PostgreSQL
 - ✅ **Validation testing** for rating values and required fields
 - ✅ **Error handling** for various failure scenarios
 - ✅ **Business logic testing** for rating calculations
@@ -135,7 +135,7 @@ npm run test:watch
 ## 🔧 Testing Architecture
 
 ### **Isolation Strategy**
-- **In-memory SQLite** for database tests
+- **PostgreSQL test database** for database tests
 - **Fresh database** created for each test suite
 - **Mocked external dependencies** (fetch, localStorage)
 - **Sandboxed DOM environment** with JSDOM

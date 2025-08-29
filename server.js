@@ -498,8 +498,8 @@ app.post('/api/ratings', authenticateToken, async (req, res) => {
       error: error.message,
       stack: error.stack,
       user_id: req.user?.userId,
-      title,
-      artist,
+      song_title,
+      song_artist,
       rating
     });
     res.status(500).json({ error: 'Database error: ' + error.message });

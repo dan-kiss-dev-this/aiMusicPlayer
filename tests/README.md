@@ -21,7 +21,7 @@ tests/
 ### 1. Backend Unit Tests (`ratings.test.js`)
 - **API Endpoint Testing**: POST/GET rating endpoints
 - **Authentication**: JWT token validation
-- **Database Operations**: CRUD operations with SQLite
+- **Database Operations**: CRUD operations with PostgreSQL
 - **Validation**: Input validation and error handling
 - **Business Logic**: Rating calculations and updates
 
@@ -170,7 +170,7 @@ JWT_SECRET=test-jwt-secret-key-for-testing-only
 ```
 
 ### Database Configuration
-- Uses in-memory SQLite for isolation
+- Uses test PostgreSQL database for isolation
 - Fresh database created for each test suite
 - Automatic cleanup between tests
 
