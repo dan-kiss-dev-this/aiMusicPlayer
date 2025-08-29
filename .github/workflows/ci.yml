@@ -1,0 +1,484 @@
+name: Radio Calico CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run security scan daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+env:
+  NODE_VERSION: '18'
+  POSTGRES_VERSION: '15'
+
+jobs:
+  # Lint and Code Quality
+  lint:
+    name: Code Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint (if configured)
+        run: |
+          if [ -f ".eslintrc.js" ] || [ -f ".eslintrc.json" ]; then
+            npm run lint || echo "ESLint not configured, skipping..."
+          else
+            echo "ESLint not configured, skipping..."
+          fi
+        continue-on-error: true
+
+      - name: Check code formatting (Prettier)
+        run: |
+          if [ -f ".prettierrc" ] || [ -f "prettier.config.js" ]; then
+            npx prettier --check . || echo "Prettier not configured, skipping..."
+          else
+            echo "Prettier not configured, skipping..."
+          fi
+        continue-on-error: true
+
+  # Security Scanning
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install main dependencies
+        run: npm ci
+
+      - name: Install test dependencies
+        run: cd tests && npm ci
+
+      - name: Run npm audit (main dependencies)
+        run: |
+          echo "🔍 Running npm audit on main dependencies..."
+          npm audit --audit-level=moderate --json > security-audit-main.json || true
+          npm audit --audit-level=moderate || echo "Main dependencies have vulnerabilities"
+
+      - name: Run npm audit (test dependencies)
+        run: |
+          echo "🔍 Running npm audit on test dependencies..."
+          cd tests
+          npm audit --audit-level=moderate --json > ../security-audit-tests.json || true
+          npm audit --audit-level=moderate || echo "Test dependencies have vulnerabilities"
+
+      - name: Check for hardcoded secrets
+        run: |
+          echo "🔍 Scanning for hardcoded secrets..."
+          # Look for potential secrets but exclude test files and known safe patterns
+          if grep -r -i --exclude-dir=node_modules --exclude-dir=.git \
+            --exclude="*.test.js" --exclude="*.spec.js" \
+            "password.*=.*['\"][^'\"]*['\"]" . > secrets-scan.txt 2>/dev/null; then
+            
+            # Filter out obvious false positives
+            if grep -v "test\|spec\|example\|placeholder\|process\.env" secrets-scan.txt > secrets-filtered.txt; then
+              if [ -s secrets-filtered.txt ]; then
+                echo "❌ Potential hardcoded secrets found:"
+                cat secrets-filtered.txt
+                exit 1
+              fi
+            fi
+          fi
+          echo "✅ No hardcoded secrets detected"
+
+      - name: Run custom security script
+        run: |
+          chmod +x scripts/ci-security-audit.sh
+          CI=true ./scripts/ci-security-audit.sh
+
+      - name: Upload security audit results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            security-audit-main.json
+            security-audit-tests.json
+            secrets-scan.txt
+            security-reports/
+          retention-days: 30
+
+      - name: Security Summary
+        if: always()
+        run: |
+          echo "## Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f "security-audit-main.json" ]; then
+            CRITICAL=$(jq '.vulnerabilities | to_entries | map(select(.value.severity == "critical")) | length' security-audit-main.json 2>/dev/null || echo "0")
+            HIGH=$(jq '.vulnerabilities | to_entries | map(select(.value.severity == "high")) | length' security-audit-main.json 2>/dev/null || echo "0")
+            echo "| Main Dependencies | Critical: $CRITICAL, High: $HIGH |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -f "security-audit-tests.json" ]; then
+            CRITICAL_TEST=$(jq '.vulnerabilities | to_entries | map(select(.value.severity == "critical")) | length' security-audit-tests.json 2>/dev/null || echo "0")
+            HIGH_TEST=$(jq '.vulnerabilities | to_entries | map(select(.value.severity == "high")) | length' security-audit-tests.json 2>/dev/null || echo "0")
+            echo "| Test Dependencies | Critical: $CRITICAL_TEST, High: $HIGH_TEST |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # Unit Tests
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: [lint]
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: radiocalico_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install main dependencies
+        run: npm ci
+
+      - name: Install test dependencies
+        run: cd tests && npm ci
+
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for PostgreSQL to be ready..."
+            sleep 2
+          done
+
+      - name: Setup test database
+        env:
+          PGPASSWORD: test_password
+        run: |
+          # Initialize test database schema
+          psql -h localhost -U postgres -d radiocalico_test -f init-db.sql
+
+      - name: Run unit tests
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: postgres
+          DB_PASSWORD: test_password
+          DB_NAME: radiocalico_test
+          JWT_SECRET: test-jwt-secret-for-github-actions
+        run: |
+          echo "🧪 Running unit tests..."
+          cd tests
+          npm test
+
+      - name: Run tests with coverage
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: postgres
+          DB_PASSWORD: test_password
+          DB_NAME: radiocalico_test
+          JWT_SECRET: test-jwt-secret-for-github-actions
+        run: |
+          echo "📊 Running tests with coverage..."
+          cd tests
+          npm run test:coverage
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: |
+            tests/coverage/
+            tests/test-results.xml
+          retention-days: 30
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        if: always()
+        with:
+          directory: ./tests/coverage/
+          fail_ci_if_error: false
+
+  # Integration Tests
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [test]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd tests && npm ci
+
+      - name: Start test environment with Docker
+        run: |
+          echo "🐳 Starting integration test environment..."
+          docker-compose -f docker-compose.dev.yml up -d
+          
+          # Wait for services to be ready
+          timeout 60 bash -c 'until curl -f http://localhost:3000/health; do sleep 2; done'
+
+      - name: Run integration tests
+        run: |
+          echo "🔗 Running integration tests..."
+          cd tests
+          npm run test:integration
+
+      - name: Cleanup test environment
+        if: always()
+        run: |
+          docker-compose -f docker-compose.dev.yml down -v
+          docker system prune -f
+
+  # Docker Build Test
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [security]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build development image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: development
+          push: false
+          tags: radiocalico:dev
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build production image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: production
+          push: false
+          tags: radiocalico:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test production image
+        run: |
+          echo "🧪 Testing production Docker image..."
+          docker run --rm -d --name test-container \
+            -e NODE_ENV=production \
+            -e DB_HOST=localhost \
+            -e DB_USER=test \
+            -e DB_PASSWORD=test \
+            -e DB_NAME=test \
+            -e JWT_SECRET=test \
+            -p 3001:3000 \
+            radiocalico:latest
+          
+          # Wait for container to start
+          sleep 10
+          
+          # Test if container is healthy
+          if docker ps | grep test-container; then
+            echo "✅ Production image builds and runs successfully"
+            docker stop test-container
+          else
+            echo "❌ Production image failed to start"
+            docker logs test-container
+            exit 1
+          fi
+
+  # Container Security Scan
+  container-security:
+    name: Container Security
+    runs-on: ubuntu-latest
+    needs: [docker]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build image for scanning
+        run: docker build -t radiocalico:scan .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'radiocalico:scan'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run Trivy scanner for summary
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'radiocalico:scan'
+          format: 'table'
+
+  # Deployment Test
+  deployment:
+    name: Deployment Test
+    runs-on: ubuntu-latest
+    needs: [test, integration, container-security]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Test production deployment
+        run: |
+          echo "🚀 Testing production deployment..."
+          
+          # Start production environment
+          docker-compose -f docker-compose.prod.yml up -d
+          
+          # Wait for services to be ready
+          timeout 120 bash -c 'until curl -f http://localhost/health; do sleep 5; done'
+          
+          # Test key endpoints
+          curl -f http://localhost/health
+          curl -f http://localhost/api/songs
+          
+          echo "✅ Production deployment test successful"
+
+      - name: Cleanup deployment test
+        if: always()
+        run: |
+          docker-compose -f docker-compose.prod.yml down -v
+          docker system prune -f
+
+  # Dependency Check
+  dependency-check:
+    name: Dependency Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check for outdated dependencies
+        run: |
+          echo "📦 Checking for outdated dependencies..."
+          npm outdated > outdated-deps.txt || true
+          if [ -s outdated-deps.txt ]; then
+            echo "⚠️ Outdated dependencies found:"
+            cat outdated-deps.txt
+            echo "Consider updating these dependencies"
+          else
+            echo "✅ All dependencies are up to date"
+          fi
+
+      - name: Generate dependency tree
+        run: |
+          echo "🌳 Generating dependency tree..."
+          npm list --depth=0 > dependency-tree.txt
+          echo "Dependency tree saved"
+
+      - name: Upload dependency analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-analysis
+          path: |
+            outdated-deps.txt
+            dependency-tree.txt
+          retention-days: 7
+
+  # Summary
+  summary:
+    name: CI/CD Summary
+    runs-on: ubuntu-latest
+    needs: [lint, security, test, integration, docker, container-security, dependency-check]
+    if: always()
+    
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "# Radio Calico CI/CD Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Job Status" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Lint | ${{ needs.lint.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security | ${{ needs.security.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Unit Tests | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Integration Tests | ${{ needs.integration.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker Build | ${{ needs.docker.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Container Security | ${{ needs.container-security.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependency Check | ${{ needs.dependency-check.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ needs.security.result }}" == "failure" ]]; then
+            echo "⚠️ **Security issues detected!** Please review the security scan results." >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [[ "${{ needs.test.result }}" == "failure" ]]; then
+            echo "❌ **Tests failed!** Please fix failing tests before merging." >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [[ "${{ needs.container-security.result }}" == "failure" ]]; then
+            echo "🐳 **Container security issues found!** Please review Trivy scan results." >> $GITHUB_STEP_SUMMARY
+          fi

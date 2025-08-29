@@ -1,0 +1,457 @@
+name: Security Monitoring
+
+on:
+  schedule:
+    # Run daily at 6 AM UTC
+    - cron: '0 6 * * *'
+  
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      scan_type:
+        description: 'Type of security scan to run'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+        - full
+        - dependencies
+        - containers
+        - secrets
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  # Daily dependency vulnerability scan
+  dependency-scan:
+    name: Dependency Security Scan
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scan_type == 'dependencies' || github.event.inputs.scan_type == 'full' || github.event_name == 'schedule'
+    outputs:
+      critical_count: ${{ steps.parse_audit.outputs.critical_count }}
+      high_count: ${{ steps.parse_audit.outputs.high_count }}
+      has_vulnerabilities: ${{ steps.parse_audit.outputs.has_vulnerabilities }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd tests && npm ci
+
+      - name: Run comprehensive npm audit
+        run: |
+          echo "🔍 Running comprehensive dependency security scan..."
+          
+          # Main dependencies
+          echo "## Main Dependencies Audit" > security-report.md
+          npm audit --audit-level=info --json > main-audit.json || true
+          npm audit --audit-level=info >> security-report.md || echo "Main dependencies have vulnerabilities"
+          
+          # Test dependencies
+          echo -e "\n## Test Dependencies Audit" >> security-report.md
+          cd tests
+          npm audit --audit-level=info --json > ../test-audit.json || true
+          npm audit --audit-level=info >> ../security-report.md || echo "Test dependencies have vulnerabilities"
+
+      - name: Parse audit results
+        id: parse_audit
+        run: |
+          echo "📊 Parsing audit results..."
+          
+          # Count vulnerabilities by severity
+          if [ -f "main-audit.json" ]; then
+            CRITICAL_MAIN=$(jq '.vulnerabilities | to_entries | map(select(.value.severity == "critical")) | length' main-audit.json 2>/dev/null || echo "0")
+            HIGH_MAIN=$(jq '.vulnerabilities | to_entries | map(select(.value.severity == "high")) | length' main-audit.json 2>/dev/null || echo "0")
+            MODERATE_MAIN=$(jq '.vulnerabilities | to_entries | map(select(.value.severity == "moderate")) | length' main-audit.json 2>/dev/null || echo "0")
+            LOW_MAIN=$(jq '.vulnerabilities | to_entries | map(select(.value.severity == "low")) | length' main-audit.json 2>/dev/null || echo "0")
+          else
+            CRITICAL_MAIN=0; HIGH_MAIN=0; MODERATE_MAIN=0; LOW_MAIN=0
+          fi
+          
+          if [ -f "test-audit.json" ]; then
+            CRITICAL_TEST=$(jq '.vulnerabilities | to_entries | map(select(.value.severity == "critical")) | length' test-audit.json 2>/dev/null || echo "0")
+            HIGH_TEST=$(jq '.vulnerabilities | to_entries | map(select(.value.severity == "high")) | length' test-audit.json 2>/dev/null || echo "0")
+          else
+            CRITICAL_TEST=0; HIGH_TEST=0
+          fi
+          
+          # Calculate totals
+          TOTAL_CRITICAL=$((CRITICAL_MAIN + CRITICAL_TEST))
+          TOTAL_HIGH=$((HIGH_MAIN + HIGH_TEST))
+          
+          # Create summary
+          echo "## Vulnerability Summary" >> security-report.md
+          echo "| Component | Critical | High | Moderate | Low |" >> security-report.md
+          echo "|-----------|----------|------|----------|-----|" >> security-report.md
+          echo "| Main Dependencies | $CRITICAL_MAIN | $HIGH_MAIN | $MODERATE_MAIN | $LOW_MAIN |" >> security-report.md
+          echo "| Test Dependencies | $CRITICAL_TEST | $HIGH_TEST | - | - |" >> security-report.md
+          
+          # Set outputs
+          echo "critical_count=$TOTAL_CRITICAL" >> $GITHUB_OUTPUT
+          echo "high_count=$TOTAL_HIGH" >> $GITHUB_OUTPUT
+          echo "has_vulnerabilities=$([[ $TOTAL_CRITICAL -gt 0 || $TOTAL_HIGH -gt 0 ]] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
+
+      - name: Upload security report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-security-report
+          path: |
+            security-report.md
+            main-audit.json
+            test-audit.json
+          retention-days: 30
+
+      - name: Notify on critical vulnerabilities
+        if: steps.parse_audit.outputs.has_vulnerabilities == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const criticalCount = '${{ steps.parse_audit.outputs.critical_count }}';
+            const highCount = '${{ steps.parse_audit.outputs.high_count }}';
+            
+            // Create issue for high-severity vulnerabilities
+            const title = `🚨 Security Alert: ${criticalCount} Critical, ${highCount} High Severity Vulnerabilities Detected`;
+            const body = `
+            ## Security Vulnerability Alert
+            
+            Our automated security scan has detected vulnerabilities in project dependencies:
+            
+            - **Critical Vulnerabilities:** ${criticalCount}
+            - **High Severity Vulnerabilities:** ${highCount}
+            
+            ### Action Required
+            
+            1. Review the [security report](${context.payload.repository.html_url}/actions/runs/${context.runId})
+            2. Update vulnerable dependencies using \`npm audit fix\`
+            3. Test the application after updates
+            4. Run \`make security\` locally for detailed analysis
+            
+            ### Resources
+            
+            - [NPM Audit Documentation](https://docs.npmjs.com/cli/v8/commands/npm-audit)
+            - [Security Best Practices](${context.payload.repository.html_url}/blob/main/docs/SECURITY.md)
+            
+            **Auto-generated by Security Monitoring workflow**
+            `;
+            
+            // Check if similar issue already exists
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'security,vulnerability'
+            });
+            
+            const existingIssue = issues.data.find(issue => 
+              issue.title.includes('Security Alert') && 
+              issue.user.type === 'Bot'
+            );
+            
+            if (existingIssue) {
+              // Update existing issue
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: `${body}\n\n---\n**Updated:** ${new Date().toISOString()}`
+              });
+            } else {
+              // Create new issue
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['security', 'vulnerability', 'high-priority']
+              });
+            }
+
+  # Container security scan
+  container-scan:
+    name: Container Security Scan
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scan_type == 'containers' || github.event.inputs.scan_type == 'full' || github.event_name == 'schedule'
+    outputs:
+      container_critical: ${{ steps.parse_container.outputs.container_critical }}
+      container_high: ${{ steps.parse_container.outputs.container_high }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build images for scanning
+        run: |
+          echo "🐳 Building Docker images for security scanning..."
+          docker build -t radiocalico:security-scan .
+          docker build --target development -t radiocalico:dev-security-scan .
+
+      - name: Run Trivy scanner on production image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'radiocalico:security-scan'
+          format: 'sarif'
+          output: 'trivy-prod-results.sarif'
+
+      - name: Run Trivy scanner on development image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'radiocalico:dev-security-scan'
+          format: 'sarif'
+          output: 'trivy-dev-results.sarif'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: |
+            trivy-prod-results.sarif
+            trivy-dev-results.sarif
+
+      - name: Generate container security report
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'radiocalico:security-scan'
+          format: 'json'
+          output: 'container-security-report.json'
+
+      - name: Parse container vulnerabilities
+        id: parse_container
+        run: |
+          echo "📊 Analyzing container security..."
+          
+          if [ -f "container-security-report.json" ]; then
+            # Count vulnerabilities by severity
+            CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' container-security-report.json 2>/dev/null || echo "0")
+            HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' container-security-report.json 2>/dev/null || echo "0")
+            MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "MEDIUM")] | length' container-security-report.json 2>/dev/null || echo "0")
+            
+            echo "Container vulnerabilities found:"
+            echo "Critical: $CRITICAL, High: $HIGH, Medium: $MEDIUM"
+            
+            # Create summary
+            echo "## Container Security Summary" > container-summary.md
+            echo "| Severity | Count |" >> container-summary.md
+            echo "|----------|-------|" >> container-summary.md
+            echo "| Critical | $CRITICAL |" >> container-summary.md
+            echo "| High | $HIGH |" >> container-summary.md
+            echo "| Medium | $MEDIUM |" >> container-summary.md
+            
+            echo "container_critical=$CRITICAL" >> $GITHUB_OUTPUT
+            echo "container_high=$HIGH" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload container security artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-security-report
+          path: |
+            container-security-report.json
+            container-summary.md
+            trivy-*-results.sarif
+          retention-days: 30
+
+  # Secret scanning
+  secret-scan:
+    name: Secret Security Scan
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scan_type == 'secrets' || github.event.inputs.scan_type == 'full' || github.event_name == 'schedule'
+    outputs:
+      secret_count: ${{ steps.parse_secrets.outputs.secret_count }}
+      has_secrets: ${{ steps.parse_secrets.outputs.has_secrets }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for comprehensive scan
+
+      - name: Install secret scanning tools
+        run: |
+          # Install gitleaks for secret detection
+          wget -q https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_linux_x64.tar.gz
+          tar -xzf gitleaks_linux_x64.tar.gz
+          sudo mv gitleaks /usr/local/bin/
+
+      - name: Run Gitleaks scan
+        run: |
+          echo "🔐 Running comprehensive secret scan..."
+          
+          # Scan for secrets in git history
+          gitleaks detect --source . --report-format json --report-path gitleaks-report.json --verbose || true
+          
+          # Also scan current files only
+          gitleaks detect --source . --no-git --report-format json --report-path gitleaks-current.json --verbose || true
+
+      - name: Custom secret patterns scan
+        run: |
+          echo "🔍 Running custom secret pattern scan..."
+          
+          # Look for common secret patterns
+          echo "## Custom Secret Scan Results" > secret-scan-report.md
+          
+          # Database URLs
+          if grep -r -n "postgres://.*:.*@" . --exclude-dir=node_modules --exclude-dir=.git > db-secrets.txt 2>/dev/null; then
+            echo "### Database URLs Found:" >> secret-scan-report.md
+            cat db-secrets.txt >> secret-scan-report.md
+            echo "" >> secret-scan-report.md
+          fi
+          
+          # API Keys
+          if grep -r -n -i "api[_-]key.*=.*['\"][^'\"]*['\"]" . --exclude-dir=node_modules --exclude-dir=.git > api-keys.txt 2>/dev/null; then
+            echo "### Potential API Keys Found:" >> secret-scan-report.md
+            cat api-keys.txt >> secret-scan-report.md
+            echo "" >> secret-scan-report.md
+          fi
+          
+          # Private keys
+          if grep -r -n "BEGIN.*PRIVATE.*KEY" . --exclude-dir=node_modules --exclude-dir=.git > private-keys.txt 2>/dev/null; then
+            echo "### Private Keys Found:" >> secret-scan-report.md
+            cat private-keys.txt >> secret-scan-report.md
+          fi
+
+      - name: Parse secret scan results
+        id: parse_secrets
+        run: |
+          echo "📊 Analyzing secret scan results..."
+          
+          SECRET_COUNT=0
+          if [ -f "gitleaks-report.json" ]; then
+            SECRET_COUNT=$(jq length gitleaks-report.json 2>/dev/null || echo "0")
+          fi
+          
+          echo "Secrets found: $SECRET_COUNT"
+          echo "secret_count=$SECRET_COUNT" >> $GITHUB_OUTPUT
+          echo "has_secrets=$([[ $SECRET_COUNT -gt 0 ]] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
+
+      - name: Upload secret scan results
+        uses: actions/upload-artifact@v4
+        with:
+          name: secret-security-report
+          path: |
+            gitleaks-report.json
+            gitleaks-current.json
+            secret-scan-report.md
+            db-secrets.txt
+            api-keys.txt
+            private-keys.txt
+          retention-days: 30
+
+      - name: Alert on secrets found
+        if: steps.parse_secrets.outputs.has_secrets == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const secretCount = '${{ steps.parse_secrets.outputs.secret_count }}';
+            
+            const title = `🚨 URGENT: ${secretCount} Potential Secrets Detected in Repository`;
+            const body = `
+            ## 🔴 CRITICAL SECURITY ALERT
+            
+            **${secretCount} potential secrets have been detected in the repository!**
+            
+            ### Immediate Actions Required:
+            
+            1. **DO NOT IGNORE THIS ALERT**
+            2. Review the [detailed scan results](${context.payload.repository.html_url}/actions/runs/${context.runId})
+            3. If real secrets are found:
+               - Rotate/invalidate the exposed credentials immediately
+               - Remove secrets from git history using tools like BFG Repo-Cleaner
+               - Update any systems using these credentials
+            4. Implement proper secret management (environment variables, secrets manager)
+            
+            ### Resources:
+            
+            - [Removing sensitive data from Git](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository)
+            - [BFG Repo-Cleaner](https://rtyley.github.io/bfg-repo-cleaner/)
+            - [Secret Management Best Practices](${context.payload.repository.html_url}/blob/main/docs/SECURITY.md)
+            
+            **This is an automated alert - immediate action required!**
+            `;
+            
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: ['security', 'critical', 'secrets', 'urgent']
+            });
+
+  # Security summary and notifications
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    needs: [dependency-scan, container-scan, secret-scan]
+    if: always()
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Generate comprehensive security report
+        run: |
+          echo "📋 Generating comprehensive security summary..."
+          
+          echo "# Radio Calico Security Report" > SECURITY_REPORT.md
+          echo "**Generated:** $(date -u)" >> SECURITY_REPORT.md
+          echo "" >> SECURITY_REPORT.md
+          
+          echo "## Scan Results Summary" >> SECURITY_REPORT.md
+          echo "| Scan Type | Status | Critical Issues |" >> SECURITY_REPORT.md
+          echo "|-----------|--------|-----------------|" >> SECURITY_REPORT.md
+          echo "| Dependencies | ${{ needs.dependency-scan.result }} | ${{ needs.dependency-scan.outputs.critical_count || 0 }} + ${{ needs.dependency-scan.outputs.high_count || 0 }} |" >> SECURITY_REPORT.md
+          echo "| Containers | ${{ needs.container-scan.result }} | ${{ needs.container-scan.outputs.container_critical || 0 }} + ${{ needs.container-scan.outputs.container_high || 0 }} |" >> SECURITY_REPORT.md
+          echo "| Secrets | ${{ needs.secret-scan.result }} | ${{ needs.secret-scan.outputs.secret_count || 0 }} |" >> SECURITY_REPORT.md
+          echo "" >> SECURITY_REPORT.md
+          
+          # Include individual reports if they exist
+          if [ -d "dependency-security-report" ]; then
+            echo "## Dependency Security Details" >> SECURITY_REPORT.md
+            if [ -f "dependency-security-report/security-report.md" ]; then
+              cat dependency-security-report/security-report.md >> SECURITY_REPORT.md
+            fi
+            echo "" >> SECURITY_REPORT.md
+          fi
+          
+          if [ -d "container-security-report" ]; then
+            echo "## Container Security Details" >> SECURITY_REPORT.md
+            if [ -f "container-security-report/container-summary.md" ]; then
+              cat container-security-report/container-summary.md >> SECURITY_REPORT.md
+            fi
+            echo "" >> SECURITY_REPORT.md
+          fi
+          
+          if [ -d "secret-security-report" ]; then
+            echo "## Secret Scan Details" >> SECURITY_REPORT.md
+            if [ -f "secret-security-report/secret-scan-report.md" ]; then
+              cat secret-security-report/secret-scan-report.md >> SECURITY_REPORT.md
+            fi
+          fi
+
+      - name: Upload comprehensive report
+        uses: actions/upload-artifact@v4
+        with:
+          name: comprehensive-security-report
+          path: SECURITY_REPORT.md
+          retention-days: 90
+
+      - name: Update security dashboard
+        run: |
+          echo "## 🛡️ Security Dashboard" >> $GITHUB_STEP_SUMMARY
+          echo "**Last Updated:** $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Status | Action Required |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|-----------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependencies | ${{ needs.dependency-scan.result }} | ${{ needs.dependency-scan.result == 'failure' && '⚠️ Review vulnerabilities' || '✅ No action needed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Containers | ${{ needs.container-scan.result }} | ${{ needs.container-scan.result == 'failure' && '⚠️ Update base images' || '✅ No action needed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Secrets | ${{ needs.secret-scan.result }} | ${{ needs.secret-scan.result == 'failure' && '🚨 URGENT: Remove secrets' || '✅ No secrets detected' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📊 [View Detailed Reports](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})" >> $GITHUB_STEP_SUMMARY
