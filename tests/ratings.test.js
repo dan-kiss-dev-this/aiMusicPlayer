@@ -277,13 +277,6 @@ module.exports = {
     createMultipleTestUsers
 };
 
-async function createTestRatings(db, userId) {
-    await db.query(`
-        INSERT INTO ratings (user_id, song_title, song_artist, rating)
-        VALUES ($1, $2, $3, $4)
-    `, [userId, 'Test Song', 'Test Artist', 1]);
-}
-
 async function createMultipleTestUsers(db, count) {
     const users = [];
     const passwordHash = await bcrypt.hash('testpassword', 10);
