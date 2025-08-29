@@ -629,10 +629,16 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
-  logger.info('Radio Calico server started', {
-    port: PORT,
-    environment: process.env.NODE_ENV || 'development',
-    timestamp: new Date().toISOString()
+if (require.main === module) {
+  // Only start the server if this file is run directly
+  app.listen(PORT, () => {
+    logger.info('Radio Calico server started', {
+      port: PORT,
+      environment: process.env.NODE_ENV || 'development',
+      timestamp: new Date().toISOString()
+    });
   });
-});
+}
+
+// Export the app for testing
+module.exports = app;

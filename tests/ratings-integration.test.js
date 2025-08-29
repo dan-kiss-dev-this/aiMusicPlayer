@@ -12,8 +12,8 @@
  */
 
 const request = require('supertest');
-// const { app } = require('../server'); // Comment out for now
-const Database = require('better-sqlite3');
+const app = require('../server'); // Import the Express app
+const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
@@ -23,85 +23,44 @@ describe('Ratings System Integration Tests', () => {
     let authToken;
     
     beforeAll(async () => {
-        // Create in-memory database for testing
-        db = new Database(':memory:');
+        // Create PostgreSQL connection for testing
+        db = new Pool({
+            host: process.env.DB_HOST || 'localhost',
+            port: process.env.DB_PORT || 5432,
+            user: process.env.DB_USER || 'postgres',
+            password: process.env.DB_PASSWORD || 'test_password',
+            database: process.env.DB_NAME || 'radiocalico_test'
+        });
         
-        // Create tables
-        const createUsersTable = `
-            CREATE TABLE users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                is_verified BOOLEAN DEFAULT 0
-            )
-        `;
-        
-        const createSongsTable = `
-            CREATE TABLE songs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                artist TEXT NOT NULL,
-                duration INTEGER,
-                file_path TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(title, artist)
-            )
-        `;
-        
-        const createRatingsTable = `
-            CREATE TABLE ratings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                song_id INTEGER NOT NULL,
-                rating INTEGER NOT NULL CHECK (rating IN (-1, 1)),
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-                FOREIGN KEY (song_id) REFERENCES songs (id) ON DELETE CASCADE,
-                UNIQUE(user_id, song_id)
-            )
-        `;
-        
-        db.exec(createUsersTable);
-        db.exec(createSongsTable);
-        db.exec(createRatingsTable);
+        // Clean test data (tables already exist from init-db.sql)
+        await db.query('DELETE FROM ratings WHERE user_id IN (SELECT id FROM users WHERE username LIKE $1)', ['test%']);
+        await db.query('DELETE FROM users WHERE username LIKE $1', ['test%']);
         
         // Create test user
         const hashedPassword = await bcrypt.hash('testpassword123', 10);
-        const userStmt = db.prepare(`
+        const userResult = await db.query(`
             INSERT INTO users (username, email, password_hash, is_verified)
-            VALUES (?, ?, ?, 1)
-        `);
+            VALUES ($1, $2, $3, true)
+            RETURNING id, username, email
+        `, ['testuser', 'test@example.com', hashedPassword]);
         
-        const userResult = userStmt.run('testuser', 'test@example.com', hashedPassword);
-        testUser = {
-            id: userResult.lastInsertRowid,
-            username: 'testuser',
-            email: 'test@example.com'
-        };
+        testUser = userResult.rows[0];
         
         // Create auth token
-        authToken = jwt.sign(testUser, process.env.JWT_SECRET || 'test-secret', { expiresIn: '1h' });
+        authToken = jwt.sign(testUser, process.env.JWT_SECRET || 'test-jwt-secret-for-github-actions', { expiresIn: '1h' });
         
         // Replace app's database with test database
         app.locals.db = db;
     });
     
-    afterAll(() => {
+    afterAll(async () => {
         if (db) {
-            db.close();
+            // Clean up test data
+            await db.query('DELETE FROM ratings WHERE user_id IN (SELECT id FROM users WHERE username LIKE $1)', ['test%']);
+            await db.query('DELETE FROM users WHERE username LIKE $1', ['test%']);
+            await db.end();
         }
     });
-    
-    beforeEach(() => {
-        // Clear ratings and songs before each test
-        db.exec('DELETE FROM ratings');
-        db.exec('DELETE FROM songs');
-    });
-
-    describe('Complete Rating Flow', () => {
         test('should handle complete rating submission flow', async () => {
             const songData = {
                 song_title: 'Test Song',

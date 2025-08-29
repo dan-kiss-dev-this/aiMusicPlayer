@@ -2,9 +2,12 @@
 // File: tests/ratings.test.js
 
 const request = require('supertest');
-const sqlite3 = require('sqlite3').verbose();
+// Using PostgreSQL for testing to match production
+const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+
+// Mock the app for testing
 const app = require('../server'); // Import your Express app
 
 describe('Ratings System Backend Tests', () => {
@@ -14,11 +17,17 @@ describe('Ratings System Backend Tests', () => {
     
     // Test database setup
     beforeEach(async () => {
-        // Create in-memory test database
-        db = new sqlite3.Database(':memory:');
+        // Create PostgreSQL connection for testing
+        db = new Pool({
+            host: process.env.DB_HOST || 'localhost',
+            port: process.env.DB_PORT || 5432,
+            user: process.env.DB_USER || 'postgres',
+            password: process.env.DB_PASSWORD || 'test_password',
+            database: process.env.DB_NAME || 'radiocalico_test'
+        });
         
-        // Create tables for testing
-        await createTestTables(db);
+        // Clean and setup test data
+        await cleanTestData(db);
         
         // Create test user
         testUser = await createTestUser(db);
@@ -33,7 +42,8 @@ describe('Ratings System Backend Tests', () => {
     afterEach(async () => {
         // Clean up database
         if (db) {
-            db.close();
+            await cleanTestData(db);
+            await db.end();
         }
     });
 
@@ -221,54 +231,57 @@ describe('Ratings System Backend Tests', () => {
 });
 
 // Helper functions
-async function createTestTables(db) {
-    return new Promise((resolve, reject) => {
-        db.serialize(() => {
-            db.run(`CREATE TABLE users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )`);
-            
-            db.run(`CREATE TABLE ratings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                song_title TEXT NOT NULL,
-                song_artist TEXT NOT NULL,
-                rating INTEGER NOT NULL CHECK (rating IN (-1, 1)),
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (id),
-                UNIQUE(user_id, song_title, song_artist)
-            )`, resolve);
-        });
-    });
+async function cleanTestData(db) {
+    // Clean test data but keep schema (tables already exist from init-db.sql)
+    await db.query('DELETE FROM ratings WHERE user_id IN (SELECT id FROM users WHERE username LIKE $1)', ['test%']);
+    await db.query('DELETE FROM users WHERE username LIKE $1', ['test%']);
 }
 
 async function createTestUser(db) {
     const passwordHash = await bcrypt.hash('testpassword', 10);
     
-    return new Promise((resolve, reject) => {
-        db.run(
-            'INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)',
-            ['testuser', 'test@example.com', passwordHash],
-            function(err) {
-                if (err) reject(err);
-                else resolve({ id: this.lastID, username: 'testuser', email: 'test@example.com' });
-            }
-        );
-    });
+    const result = await db.query(`
+        INSERT INTO users (username, email, password_hash)
+        VALUES ($1, $2, $3)
+        RETURNING id, username, email
+    `, ['testuser', 'test@example.com', passwordHash]);
+    
+    return result.rows[0];
 }
 
 async function createTestRatings(db, userId) {
-    return new Promise((resolve, reject) => {
-        db.run(
-            'INSERT INTO ratings (user_id, song_title, song_artist, rating) VALUES (?, ?, ?, ?)',
-            [userId, 'Test Song', 'Test Artist', 1],
-            resolve
-        );
-    });
+    await db.query(`
+        INSERT INTO ratings (user_id, song_title, song_artist, rating)
+        VALUES ($1, $2, $3, $4)
+    `, [userId, 'Test Song', 'Test Artist', 1]);
+}
+
+async function createMultipleTestUsers(db, count) {
+    const users = [];
+    for (let i = 0; i < count; i++) {
+        const passwordHash = await bcrypt.hash(`testpassword${i}`, 10);
+        const result = await db.query(`
+            INSERT INTO users (username, email, password_hash)
+            VALUES ($1, $2, $3)
+            RETURNING id, username, email
+        `, [`testuser${i}`, `test${i}@example.com`, passwordHash]);
+        
+        users.push(result.rows[0]);
+    }
+    return users;
+}
+
+module.exports = {
+    createTestUser,
+    createTestRatings,
+    createMultipleTestUsers
+};
+
+async function createTestRatings(db, userId) {
+    await db.query(`
+        INSERT INTO ratings (user_id, song_title, song_artist, rating)
+        VALUES ($1, $2, $3, $4)
+    `, [userId, 'Test Song', 'Test Artist', 1]);
 }
 
 async function createMultipleTestUsers(db, count) {
