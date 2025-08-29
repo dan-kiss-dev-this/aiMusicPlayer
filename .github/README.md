@@ -1,6 +1,6 @@
 # GitHub Actions Workflows
 
-This directory contains the complete CI/CD automation for Radio Calico. The workflows are designed to provide comprehensive testing, security scanning, and release automation.
+This directory contains the complete CI/CD automation for Radio Calico. The workflows are designed to provide comprehensive testing, security scanning, and release automation. Thanks.
 
 ## 🚀 Workflows Overview
 
