@@ -1,0 +1,258 @@
+name: Claude Issue Response
+
+on:
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  claude-issue-response:
+    name: Claude Issue Response
+    runs-on: ubuntu-latest
+    if: contains(github.event.issue.body, '@claude') || contains(github.event.comment.body, '@claude')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract Claude request
+        id: extract-request
+        run: |
+          # Get the issue or comment body
+          if [ "${{ github.event_name }}" == "issues" ]; then
+            BODY="${{ github.event.issue.body }}"
+            ISSUE_NUMBER="${{ github.event.issue.number }}"
+          else
+            BODY="${{ github.event.comment.body }}"
+            ISSUE_NUMBER="${{ github.event.issue.number }}"
+          fi
+          
+          echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+          
+          # Extract the request after @claude
+          REQUEST=$(echo "$BODY" | sed -n 's/.*@claude \(.*\)/\1/p' | head -1)
+          echo "claude_request=$REQUEST" >> $GITHUB_OUTPUT
+          
+          echo "Claude request: $REQUEST"
+
+      - name: Analyze repository for security issues
+        if: contains(steps.extract-request.outputs.claude_request, 'security') || contains(steps.extract-request.outputs.claude_request, 'scan')
+        id: security-analysis
+        run: |
+          echo "Running security analysis..."
+          
+          # Run npm audit
+          if [ -f "package.json" ]; then
+            echo "## 🔍 NPM Security Audit" > security_report.md
+            echo "" >> security_report.md
+            
+            npm audit --json > audit_result.json 2>/dev/null || true
+            
+            if [ -s audit_result.json ]; then
+              VULNERABILITIES=$(jq '.metadata.vulnerabilities.total // 0' audit_result.json)
+              CRITICAL=$(jq '.metadata.vulnerabilities.critical // 0' audit_result.json)
+              HIGH=$(jq '.metadata.vulnerabilities.high // 0' audit_result.json)
+              MODERATE=$(jq '.metadata.vulnerabilities.moderate // 0' audit_result.json)
+              
+              echo "**Summary:**" >> security_report.md
+              echo "- Total vulnerabilities: $VULNERABILITIES" >> security_report.md
+              echo "- Critical: $CRITICAL" >> security_report.md
+              echo "- High: $HIGH" >> security_report.md
+              echo "- Moderate: $MODERATE" >> security_report.md
+              echo "" >> security_report.md
+              
+              if [ "$VULNERABILITIES" -gt 0 ]; then
+                echo "### 🚨 Vulnerabilities Found" >> security_report.md
+                echo "" >> security_report.md
+                echo "\`\`\`json" >> security_report.md
+                jq '.vulnerabilities' audit_result.json >> security_report.md
+                echo "\`\`\`" >> security_report.md
+                echo "" >> security_report.md
+                echo "### 🔧 Recommended Actions" >> security_report.md
+                echo "1. Run \`npm audit fix\` to automatically fix issues" >> security_report.md
+                echo "2. Review and update vulnerable packages manually" >> security_report.md
+                echo "3. Consider using \`npm audit fix --force\` for breaking changes" >> security_report.md
+              else
+                echo "✅ No vulnerabilities found in main dependencies!" >> security_report.md
+              fi
+            else
+              echo "❌ Could not run npm audit - check package.json" >> security_report.md
+            fi
+          fi
+          
+          # Check test dependencies if they exist
+          if [ -f "tests/package.json" ]; then
+            echo "" >> security_report.md
+            echo "## 🧪 Test Dependencies Audit" >> security_report.md
+            echo "" >> security_report.md
+            
+            cd tests
+            npm audit --json > ../test_audit_result.json 2>/dev/null || true
+            cd ..
+            
+            if [ -s test_audit_result.json ]; then
+              TEST_VULNERABILITIES=$(jq '.metadata.vulnerabilities.total // 0' test_audit_result.json)
+              echo "- Test dependencies vulnerabilities: $TEST_VULNERABILITIES" >> security_report.md
+              
+              if [ "$TEST_VULNERABILITIES" -gt 0 ]; then
+                echo "" >> security_report.md
+                echo "### 🧪 Test Dependencies Issues" >> security_report.md
+                echo "Run \`cd tests && npm audit fix\` to fix test dependency issues." >> security_report.md
+              fi
+            fi
+          fi
+
+      - name: Call Claude for analysis
+        if: steps.extract-request.outputs.claude_request != ''
+        id: claude-analysis
+        run: |
+          echo "Calling Claude for analysis..."
+          
+          # Prepare context about the request
+          REQUEST="${{ steps.extract-request.outputs.claude_request }}"
+          
+          # Get repository information
+          echo "Repository: ${{ github.repository }}" > repo_context.txt
+          echo "Issue: #${{ steps.extract-request.outputs.issue_number }}" >> repo_context.txt
+          echo "Request: $REQUEST" >> repo_context.txt
+          echo "" >> repo_context.txt
+          
+          # Add security report if it exists
+          if [ -f "security_report.md" ]; then
+            echo "=== SECURITY ANALYSIS ===" >> repo_context.txt
+            cat security_report.md >> repo_context.txt
+            echo "" >> repo_context.txt
+          fi
+          
+          # Add project structure
+          echo "=== PROJECT STRUCTURE ===" >> repo_context.txt
+          find . -name "*.js" -o -name "*.json" -o -name "*.md" -o -name "*.yml" | head -20 >> repo_context.txt
+          echo "" >> repo_context.txt
+          
+          # Add package.json content
+          if [ -f "package.json" ]; then
+            echo "=== PACKAGE.JSON ===" >> repo_context.txt
+            cat package.json >> repo_context.txt
+          fi
+          
+          # Create Claude prompt
+          cat > claude_prompt.txt << 'PROMPT_EOF'
+          You are Claude, an AI assistant helping with a GitHub repository issue. 
+          
+          The user has mentioned @claude in a GitHub issue with the following request:
+          
+          PROMPT_EOF
+          
+          echo "$REQUEST" >> claude_prompt.txt
+          
+          cat >> claude_prompt.txt << 'PROMPT_EOF'
+          
+          Please analyze the repository context and provide helpful, actionable advice.
+          
+          Focus on:
+          1. Understanding the specific request
+          2. Providing practical solutions
+          3. Offering step-by-step guidance
+          4. Suggesting best practices
+          
+          If this is about security scans, provide specific commands and fixes.
+          If this is about code issues, suggest concrete improvements.
+          If this is about CI/CD, recommend workflow improvements.
+          
+          Format your response as a GitHub comment with markdown formatting.
+          
+          Repository Context:
+          PROMPT_EOF
+          
+          cat repo_context.txt >> claude_prompt.txt
+          
+          # Call Claude API
+          CLAUDE_RESPONSE=$(curl -s -X POST "https://api.anthropic.com/v1/messages" \
+            -H "Content-Type: application/json" \
+            -H "x-api-key: ${{ secrets.ANTHROPIC_API_KEY }}" \
+            -H "anthropic-version: 2023-06-01" \
+            -d '{
+              "model": "claude-3-sonnet-20240229",
+              "max_tokens": 2000,
+              "messages": [
+                {
+                  "role": "user",
+                  "content": "'"$(cat claude_prompt.txt | sed 's/"/\\"/g' | tr '\n' ' ')"'"
+                }
+              ]
+            }')
+          
+          # Extract response
+          RESPONSE=$(echo "$CLAUDE_RESPONSE" | jq -r '.content[0].text // "Error: Failed to get Claude response"')
+          
+          # Save response
+          echo "$RESPONSE" > claude_response.md
+          
+          # Set output
+          echo "response<<RESPONSE_EOF" >> $GITHUB_OUTPUT
+          echo "$RESPONSE" >> $GITHUB_OUTPUT
+          echo "RESPONSE_EOF" >> $GITHUB_OUTPUT
+
+      - name: Post Claude response to issue
+        if: steps.claude-analysis.outputs.response != ''
+        run: |
+          echo "Posting Claude response to issue..."
+          
+          # Create comment body
+          cat > comment_body.md << 'COMMENT_EOF'
+          ## 🤖 Claude AI Response
+          
+          *I've analyzed your request and here's my response:*
+          
+          COMMENT_EOF
+          
+          # Add Claude's response
+          cat claude_response.md >> comment_body.md
+          
+          # Add footer
+          cat >> comment_body.md << 'FOOTER_EOF'
+          
+          ---
+          
+          *This response was generated by Claude AI. You can mention @claude in issues or comments to get AI assistance with your repository.*
+          
+          **Available commands:**
+          - `@claude fix the security scans` - Analyze and suggest security fixes
+          - `@claude help with [topic]` - Get help with specific topics
+          - `@claude review [file/code]` - Get code review suggestions
+          
+          FOOTER_EOF
+          
+          # Post comment
+          gh issue comment ${{ steps.extract-request.outputs.issue_number }} --body-file comment_body.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Handle errors
+        if: failure()
+        run: |
+          echo "Claude issue response failed. Posting error message..."
+          
+          ERROR_MESSAGE="## ⚠️ Claude AI Error
+          
+          I encountered an error while processing your @claude request.
+          
+          **Possible causes:**
+          - API key configuration issue
+          - Network connectivity problem
+          - Request processing error
+          
+          Please check the workflow logs for more details or try again.
+          
+          ---
+          *If this continues to fail, please check the repository's Actions secrets configuration.*"
+          
+          echo "$ERROR_MESSAGE" > error_comment.md
+          gh issue comment ${{ steps.extract-request.outputs.issue_number }} --body-file error_comment.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
