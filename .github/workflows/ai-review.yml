@@ -1,0 +1,395 @@
+name: Claude AI Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, develop]
+  pull_request_review:
+    types: [submitted]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review'
+        required: true
+        type: number
+
+env:
+  NODE_VERSION: '18'
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  claude-review:
+    name: Claude AI Code Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get PR details
+        id: pr-details
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            PR_NUMBER=${{ github.event.inputs.pr_number }}
+          else
+            PR_NUMBER=${{ github.event.number }}
+          fi
+          
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          
+          # Get PR information
+          PR_INFO=$(gh pr view $PR_NUMBER --json title,body,author,files,additions,deletions --repo ${{ github.repository }})
+          echo "pr_info<<EOF" >> $GITHUB_OUTPUT
+          echo "$PR_INFO" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get changed files
+        id: changed-files
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            # For manual dispatch, get files from the PR
+            gh pr diff ${{ steps.pr-details.outputs.pr_number }} --name-only > changed_files.txt
+          else
+            # For PR events, get files from the event
+            git diff --name-only origin/${{ github.base_ref }}..HEAD > changed_files.txt
+          fi
+          
+          echo "Files changed:"
+          cat changed_files.txt
+          
+          # Store changed files for later use
+          echo "changed_files<<EOF" >> $GITHUB_OUTPUT
+          cat changed_files.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Filter relevant files
+        id: filter-files
+        run: |
+          # Only review certain file types
+          RELEVANT_EXTENSIONS="\.js$|\.ts$|\.jsx$|\.tsx$|\.py$|\.java$|\.cpp$|\.c$|\.h$|\.css$|\.scss$|\.sql$|\.yml$|\.yaml$|\.json$|\.md$"
+          
+          echo "Filtering for relevant files..."
+          grep -E "$RELEVANT_EXTENSIONS" changed_files.txt > relevant_files.txt || touch relevant_files.txt
+          
+          if [ ! -s relevant_files.txt ]; then
+            echo "No relevant files to review"
+            echo "should_review=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "should_review=true" >> $GITHUB_OUTPUT
+          echo "Relevant files to review:"
+          cat relevant_files.txt
+          
+          # Limit to max 20 files to avoid token limits
+          head -20 relevant_files.txt > review_files.txt
+
+      - name: Setup Node.js
+        if: steps.filter-files.outputs.should_review == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Prepare code context
+        if: steps.filter-files.outputs.should_review == 'true'
+        id: prepare-context
+        run: |
+          echo "Preparing code context for Claude review..."
+          
+          # Create a comprehensive diff
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            gh pr diff ${{ steps.pr-details.outputs.pr_number }} > full_diff.patch
+          else
+            git diff origin/${{ github.base_ref }}..HEAD > full_diff.patch
+          fi
+          
+          # Prepare individual file contents
+          mkdir -p review_content
+          while IFS= read -r file; do
+            if [ -f "$file" ]; then
+              echo "=== $file ===" >> review_content/files.txt
+              cat "$file" >> review_content/files.txt
+              echo -e "\n\n" >> review_content/files.txt
+            fi
+          done < review_files.txt
+          
+          # Get project context
+          echo "Project: Radio Calico AI Music Player" > project_context.txt
+          echo "Language: Node.js/JavaScript" >> project_context.txt
+          echo "Framework: Express.js" >> project_context.txt
+          echo "Database: PostgreSQL" >> project_context.txt
+          echo "Testing: Jest" >> project_context.txt
+          
+          if [ -f "README.md" ]; then
+            echo -e "\n=== README.md ===\n" >> project_context.txt
+            head -50 README.md >> project_context.txt
+          fi
+          
+          if [ -f "package.json" ]; then
+            echo -e "\n=== package.json (dependencies) ===\n" >> project_context.txt
+            jq '.dependencies, .devDependencies' package.json >> project_context.txt
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Claude AI Review
+        if: steps.filter-files.outputs.should_review == 'true'
+        id: claude-review
+        run: |
+          echo "Performing Claude AI code review..."
+          
+          # Prepare the review prompt
+          cat > claude_prompt.txt << 'PROMPT_EOF'
+          You are an expert code reviewer for a Node.js/Express.js music player application called Radio Calico. 
+          
+          Please review the following code changes and provide comprehensive feedback focusing on:
+          
+          1. **Code Quality & Best Practices**
+             - Clean code principles
+             - JavaScript/Node.js best practices
+             - Performance considerations
+             - Error handling
+          
+          2. **Security Analysis**
+             - Security vulnerabilities
+             - Input validation
+             - Authentication/authorization
+             - SQL injection prevention
+          
+          3. **Architecture & Design**
+             - Code organization
+             - Separation of concerns
+             - API design
+             - Database design
+          
+          4. **Testing & Reliability**
+             - Test coverage
+             - Edge cases
+             - Error scenarios
+             - Debugging considerations
+          
+          5. **Documentation & Maintainability**
+             - Code comments
+             - API documentation
+             - Naming conventions
+             - Code readability
+          
+          Please format your response as follows:
+          
+          ## 🔍 Code Review Summary
+          
+          ### ✅ Positive Aspects
+          - [List good practices found]
+          
+          ### ⚠️ Issues Found
+          - [List issues with severity: HIGH/MEDIUM/LOW]
+          
+          ### 🚀 Recommendations
+          - [Specific improvement suggestions]
+          
+          ### 🔒 Security Notes
+          - [Security-related observations]
+          
+          ### 📝 Additional Notes
+          - [Any other relevant observations]
+          
+          If no significant issues are found, focus on positive reinforcement and minor improvements.
+          
+          PROMPT_EOF
+          
+          # Add project context
+          cat project_context.txt >> claude_prompt.txt
+          
+          # Add PR information
+          echo -e "\n=== PULL REQUEST INFORMATION ===\n" >> claude_prompt.txt
+          echo "${{ steps.pr-details.outputs.pr_info }}" >> claude_prompt.txt
+          
+          # Add diff
+          echo -e "\n=== CODE CHANGES (DIFF) ===\n" >> claude_prompt.txt
+          cat full_diff.patch >> claude_prompt.txt
+          
+          # Add full file contents for context
+          echo -e "\n=== COMPLETE FILE CONTENTS ===\n" >> claude_prompt.txt
+          cat review_content/files.txt >> claude_prompt.txt
+          
+          # Call Claude API (using curl with Anthropic API)
+          CLAUDE_RESPONSE=$(curl -s -X POST "https://api.anthropic.com/v1/messages" \
+            -H "Content-Type: application/json" \
+            -H "x-api-key: ${{ secrets.ANTHROPIC_API_KEY }}" \
+            -H "anthropic-version: 2023-06-01" \
+            -d '{
+              "model": "claude-3-sonnet-20240229",
+              "max_tokens": 4000,
+              "messages": [
+                {
+                  "role": "user",
+                  "content": "'"$(cat claude_prompt.txt | sed 's/"/\\"/g' | tr '\n' ' ')"'"
+                }
+              ]
+            }')
+          
+          # Extract the response content
+          REVIEW_CONTENT=$(echo "$CLAUDE_RESPONSE" | jq -r '.content[0].text // "Error: Failed to get Claude response"')
+          
+          # Save review to file
+          echo "$REVIEW_CONTENT" > claude_review.md
+          
+          # Output for GitHub
+          echo "review_content<<REVIEW_EOF" >> $GITHUB_OUTPUT
+          echo "$REVIEW_CONTENT" >> $GITHUB_OUTPUT
+          echo "REVIEW_EOF" >> $GITHUB_OUTPUT
+          
+          echo "Claude review completed successfully"
+
+      - name: Post review comment
+        if: steps.filter-files.outputs.should_review == 'true' && steps.claude-review.outcome == 'success'
+        run: |
+          echo "Posting Claude review comment..."
+          
+          # Create comment body
+          cat > comment_body.md << 'COMMENT_EOF'
+          ## 🤖 Claude AI Code Review
+          
+          *Automated code review powered by Claude AI*
+          
+          COMMENT_EOF
+          
+          # Add the actual review content
+          cat claude_review.md >> comment_body.md
+          
+          # Add footer
+          cat >> comment_body.md << 'FOOTER_EOF'
+          
+          ---
+          
+          *This review was generated automatically by Claude AI. Please use this feedback as a starting point and apply human judgment for final decisions.*
+          
+          **Review Context:**
+          - Files reviewed: $(wc -l < review_files.txt)
+          - PR: #${{ steps.pr-details.outputs.pr_number }}
+          - Commit: ${{ github.sha }}
+          
+          FOOTER_EOF
+          
+          # Post comment to PR
+          gh pr comment ${{ steps.pr-details.outputs.pr_number }} --body-file comment_body.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Handle Claude API errors
+        if: steps.claude-review.outcome == 'failure'
+        run: |
+          echo "Claude API call failed. Posting error message..."
+          
+          ERROR_MESSAGE="## ⚠️ Claude AI Review Failed
+          
+          The automated code review could not be completed due to an API error.
+          
+          **Possible causes:**
+          - API key configuration issue
+          - Rate limiting
+          - Network connectivity
+          - Request too large
+          
+          Please check the workflow logs for more details and consider running the review manually.
+          
+          ---
+          *You can manually trigger this workflow using the 'workflow_dispatch' event.*"
+          
+          echo "$ERROR_MESSAGE" > error_comment.md
+          gh pr comment ${{ steps.pr-details.outputs.pr_number }} --body-file error_comment.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload review artifacts
+        if: always() && steps.filter-files.outputs.should_review == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-review-${{ steps.pr-details.outputs.pr_number }}
+          path: |
+            claude_review.md
+            full_diff.patch
+            project_context.txt
+            review_content/
+            changed_files.txt
+            relevant_files.txt
+          retention-days: 30
+
+  # Follow-up review for review comments
+  claude-follow-up:
+    name: Claude Follow-up Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request_review' && github.event.review.state == 'submitted'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Analyze review feedback
+        run: |
+          echo "Analyzing review feedback for follow-up suggestions..."
+          
+          REVIEW_BODY="${{ github.event.review.body }}"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          
+          # Simple keyword analysis
+          if echo "$REVIEW_BODY" | grep -i "security\|vulnerability\|injection\|auth"; then
+            echo "Security-related review detected"
+            # Could trigger additional security scans
+          fi
+          
+          if echo "$REVIEW_BODY" | grep -i "performance\|optimization\|slow\|memory"; then
+            echo "Performance-related review detected"
+            # Could trigger performance analysis
+          fi
+          
+          if echo "$REVIEW_BODY" | grep -i "test\|coverage\|unit\|integration"; then
+            echo "Testing-related review detected"
+            # Could suggest additional tests
+          fi
+          
+          echo "Follow-up analysis completed for PR #$PR_NUMBER"
+
+  # Summary job
+  review-summary:
+    name: Review Summary
+    runs-on: ubuntu-latest
+    needs: [claude-review, claude-follow-up]
+    if: always()
+    
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## 🤖 Claude AI Review Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ needs.claude-review.result }}" == "success" ]]; then
+            echo "✅ **Claude Review:** Completed successfully" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ needs.claude-review.result }}" == "failure" ]]; then
+            echo "❌ **Claude Review:** Failed - check logs for details" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ needs.claude-review.result }}" == "skipped" ]]; then
+            echo "⏭️ **Claude Review:** Skipped - no relevant files to review" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [[ "${{ needs.claude-follow-up.result }}" == "success" ]]; then
+            echo "✅ **Follow-up Analysis:** Completed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Next Steps:**" >> $GITHUB_STEP_SUMMARY
+          echo "1. Review the AI-generated feedback" >> $GITHUB_STEP_SUMMARY
+          echo "2. Address any high-priority issues" >> $GITHUB_STEP_SUMMARY
+          echo "3. Consider the recommendations for code improvements" >> $GITHUB_STEP_SUMMARY
+          echo "4. Ensure all security concerns are addressed" >> $GITHUB_STEP_SUMMARY
