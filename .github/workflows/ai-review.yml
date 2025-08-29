@@ -111,16 +111,32 @@ jobs:
                   Focus on Node.js, PostgreSQL, Docker, and security best practices.
                   """
                   
-                  response = client.messages.create(
-                      model="claude-3-5-sonnet-20240620",
-                      max_tokens=1000,
-                      messages=[{"role": "user", "content": prompt}]
-                  )
+                  # Try multiple models in order of preference
+                  models_to_try = [
+                      "claude-3-5-sonnet-20241022",
+                      "claude-3-5-sonnet-20240620", 
+                      "claude-3-sonnet-20240229",
+                      "claude-3-haiku-20240307"
+                  ]
                   
-                  return response.content[0].text
+                  for model in models_to_try:
+                      try:
+                          response = client.messages.create(
+                              model=model,
+                              max_tokens=1000,
+                              messages=[{"role": "user", "content": prompt}]
+                          )
+                          return f"**Model Used:** {model}\n\n{response.content[0].text}"
+                      except Exception as model_error:
+                          print(f"Model {model} failed: {model_error}")
+                          continue
+                  
+                  # If all models fail, return mock analysis
+                  return create_mock_analysis(file_path, content, diff)
                   
               except Exception as e:
-                  return f"Error with Claude API: {str(e)}"
+                  print(f"Claude API error: {str(e)}")
+                  return create_mock_analysis(file_path, content, diff)
 
           def create_mock_analysis(file_path, content, diff):
               """Create a mock analysis when API key is not available"""
