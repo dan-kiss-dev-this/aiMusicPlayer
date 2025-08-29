@@ -39,8 +39,8 @@ describe('Ratings System Integration Tests', () => {
         // Create test user
         const hashedPassword = await bcrypt.hash('testpassword123', 10);
         const userResult = await db.query(`
-            INSERT INTO users (username, email, password_hash, is_verified)
-            VALUES ($1, $2, $3, true)
+            INSERT INTO users (username, email, password_hash)
+            VALUES ($1, $2, $3)
             RETURNING id, username, email
         `, ['testuser', 'test@example.com', hashedPassword]);
         
@@ -73,7 +73,7 @@ describe('Ratings System Integration Tests', () => {
             const songData = {
                 song_title: 'Test Song',
                 song_artist: 'Test Artist',
-                rating: 4,
+                rating: 1, // Thumbs up (1) or thumbs down (-1)
                 user_id: testUser.id
             };
 
@@ -86,35 +86,27 @@ describe('Ratings System Integration Tests', () => {
 
             expect(response.body.success).toBe(true);
 
-            // Step 2: Verify song was created in database
-            const songResult = await db.query('SELECT * FROM songs WHERE title = $1 AND artist = $2', 
-                [songData.song_title, songData.song_artist]);
-            const song = songResult.rows[0];
-            
-            expect(song).toBeTruthy();
-            expect(song.title).toBe(songData.song_title);
-            expect(song.artist).toBe(songData.song_artist);
-
-            // Step 3: Verify rating was created in database
-            const ratingResult = await db.query('SELECT * FROM ratings WHERE user_id = $1 AND song_id = $2', 
-                [testUser.id, song.id]);
+            // Step 2: Verify rating was created in database (no separate songs table involved)
+            const ratingResult = await db.query('SELECT * FROM ratings WHERE user_id = $1 AND song_title = $2 AND song_artist = $3', 
+                [testUser.id, songData.song_title, songData.song_artist]);
             const rating = ratingResult.rows[0];
             
             expect(rating).toBeTruthy();
             expect(rating.rating).toBe(songData.rating);
             expect(rating.user_id).toBe(testUser.id);
-            expect(rating.song_id).toBe(song.id);
+            expect(rating.song_title).toBe(songData.song_title);
+            expect(rating.song_artist).toBe(songData.song_artist);
         });
     });
 });
 
 // Helper function to create test data
-async function createTestSong(title, artist) {
+async function createTestSong(title, artist, db) {
     const result = await db.query('INSERT INTO songs (title, artist) VALUES ($1, $2) RETURNING id', [title, artist]);
     return result.rows[0];
 }
 
-async function createTestRating(userId, songId, rating) {
-    const result = await db.query('INSERT INTO ratings (user_id, song_id, rating) VALUES ($1, $2, $3) RETURNING id', [userId, songId, rating]);
+async function createTestRating(userId, songTitle, songArtist, rating, db) {
+    const result = await db.query('INSERT INTO ratings (user_id, song_title, song_artist, rating) VALUES ($1, $2, $3, $4) RETURNING id', [userId, songTitle, songArtist, rating]);
     return result.rows[0];
 }
