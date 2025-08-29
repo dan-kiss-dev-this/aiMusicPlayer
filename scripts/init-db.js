@@ -1,13 +1,7 @@
-const { Pool } = require('pg');
+const sqlite3 = require('sqlite3').verbose();
 
 // Initialize database with sample data
-const db = new Pool({
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 5432,
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres',
-    database: process.env.DB_NAME || 'radiocalico'
-});
+const db = new sqlite3.Database('./database.db');
 
 console.log('🗄️  Initializing database with sample data...');
 
@@ -61,40 +55,30 @@ const samplePlaylists = [
     }
 ];
 
-// Main initialization function
-async function initializeDatabase() {
-    try {
-        // Clear existing data (reverse order due to foreign keys)
-        await db.query('DELETE FROM playlist_songs');
-        await db.query('DELETE FROM songs');
-        await db.query('DELETE FROM playlists');
+// Insert songs
+db.serialize(() => {
+    // Clear existing data
+    db.run('DELETE FROM playlist_songs');
+    db.run('DELETE FROM songs');
+    db.run('DELETE FROM playlists');
 
-        // Insert sample songs
-        for (const song of sampleSongs) {
-            await db.query(
-                'INSERT INTO songs (title, artist, album, duration) VALUES ($1, $2, $3, $4)',
-                [song.title, song.artist, song.album, song.duration]
-            );
-        }
+    // Insert sample songs
+    const songStmt = db.prepare('INSERT INTO songs (title, artist, album, duration) VALUES (?, ?, ?, ?)');
+    sampleSongs.forEach(song => {
+        songStmt.run(song.title, song.artist, song.album, song.duration);
+    });
+    songStmt.finalize();
 
-        // Insert sample playlists
-        for (const playlist of samplePlaylists) {
-            await db.query(
-                'INSERT INTO playlists (name, description) VALUES ($1, $2)',
-                [playlist.name, playlist.description]
-            );
-        }
+    // Insert sample playlists
+    const playlistStmt = db.prepare('INSERT INTO playlists (name, description) VALUES (?, ?)');
+    samplePlaylists.forEach(playlist => {
+        playlistStmt.run(playlist.name, playlist.description);
+    });
+    playlistStmt.finalize();
 
-        console.log(`✅ Added ${sampleSongs.length} sample songs`);
-        console.log(`✅ Added ${samplePlaylists.length} sample playlists`);
-        console.log('🎵 Database initialization complete!');
+    console.log(`✅ Added ${sampleSongs.length} sample songs`);
+    console.log(`✅ Added ${samplePlaylists.length} sample playlists`);
+    console.log('🎵 Database initialization complete!');
 
-    } catch (error) {
-        console.error('❌ Error initializing database:', error);
-    } finally {
-        await db.end();
-    }
-}
-
-// Run the initialization
-initializeDatabase();
+    db.close();
+});

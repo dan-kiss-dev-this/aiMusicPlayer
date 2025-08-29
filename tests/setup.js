@@ -69,32 +69,54 @@ global.testUtils = {
     },
 
     // Database test helpers
-    createTestDatabase: async () => {
-        const { Pool } = require('pg');
-        const db = new Pool({
-            host: process.env.DB_HOST || 'localhost',
-            port: process.env.DB_PORT || 5433,  // Use dev database port
-            user: process.env.DB_USER || 'postgres',
-            password: process.env.DB_PASSWORD || 'dev_password',  // Use dev password
-            database: process.env.DB_NAME || 'radiocalico_dev'  // Use dev database
-        });
+    createTestDatabase: () => {
+        const Database = require('better-sqlite3');
+        const db = new Database(':memory:');
         
-        // Clean existing test data
-        await global.testUtils.cleanDatabase(db);
+        // Create test tables
+        const createTables = `
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                is_verified BOOLEAN DEFAULT 0
+            );
+
+            CREATE TABLE songs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                artist TEXT NOT NULL,
+                duration INTEGER,
+                file_path TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(title, artist)
+            );
+
+            CREATE TABLE ratings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                song_id INTEGER NOT NULL,
+                rating INTEGER NOT NULL CHECK (rating IN (-1, 1)),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+                FOREIGN KEY (song_id) REFERENCES songs (id) ON DELETE CASCADE,
+                UNIQUE(user_id, song_id)
+            );
+        `;
         
+        db.exec(createTables);
         return db;
     },
 
     // Clean up test database
-    cleanDatabase: async (db) => {
+    cleanDatabase: (db) => {
         if (db) {
-            try {
-                await db.query('DELETE FROM ratings WHERE user_id IN (SELECT id FROM users WHERE username LIKE $1)', ['test%']);
-                await db.query('DELETE FROM users WHERE username LIKE $1', ['test%']);
-                await db.query('DELETE FROM songs WHERE title LIKE $1', ['Test%']);
-            } catch (error) {
-                console.error('Error cleaning test database:', error);
-            }
+            db.exec('DELETE FROM ratings');
+            db.exec('DELETE FROM songs');
+            db.exec('DELETE FROM users');
         }
     },
 

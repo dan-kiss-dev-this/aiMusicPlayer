@@ -1,26 +1,30 @@
 #!/usr/bin/env node
 
-const { Pool } = require('pg');
+const sqlite3 = require('sqlite3').verbose();
+const path = require('path');
 
 // Connect to the database
-const db = new Pool({
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 5432,
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres',
-    database: process.env.DB_NAME || 'radiocalico'
+const dbPath = path.join(__dirname, 'database.db');
+const db = new sqlite3.Database(dbPath, (err) => {
+    if (err) {
+        console.error('Error opening database:', err.message);
+        process.exit(1);
+    } else {
+        console.log('✅ Connected to SQLite database:', dbPath);
+    }
 });
 
-console.log('✅ Connected to PostgreSQL database');
-
 // Function to run queries
-async function query(sql, params = []) {
-    try {
-        const result = await db.query(sql, params);
-        return result.rows;
-    } catch (error) {
-        throw error;
-    }
+function query(sql, params = []) {
+    return new Promise((resolve, reject) => {
+        db.all(sql, params, (err, rows) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(rows);
+            }
+        });
+    });
 }
 
 // Main function to explore database
@@ -28,33 +32,23 @@ async function exploreDatabase() {
     try {
         console.log('\n📊 Database Tables:');
         const tables = await query(`
-            SELECT table_name as name 
-            FROM information_schema.tables 
-            WHERE table_schema = 'public' 
-            AND table_type = 'BASE TABLE'
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name NOT LIKE 'sqlite_%'
         `);
         
         for (const table of tables) {
             console.log(`\n🔍 Table: ${table.name}`);
             
             // Get table schema
-            const schema = await query(`
-                SELECT column_name, data_type, is_nullable, column_default
-                FROM information_schema.columns 
-                WHERE table_name = $1 
-                ORDER BY ordinal_position
-            `, [table.name]);
-            
-            console.log('   Columns:', schema.map(col => 
-                `${col.column_name} (${col.data_type}${col.is_nullable === 'NO' ? ' NOT NULL' : ''})`
-            ).join(', '));
+            const schema = await query(`PRAGMA table_info(${table.name})`);
+            console.log('   Columns:', schema.map(col => `${col.name} (${col.type})`).join(', '));
             
             // Get row count
             const count = await query(`SELECT COUNT(*) as count FROM ${table.name}`);
             console.log(`   Rows: ${count[0].count}`);
             
             // Show sample data if any exists
-            if (parseInt(count[0].count) > 0) {
+            if (count[0].count > 0) {
                 const sample = await query(`SELECT * FROM ${table.name} LIMIT 3`);
                 console.log('   Sample data:', JSON.stringify(sample, null, 2));
             }
@@ -91,8 +85,13 @@ async function exploreDatabase() {
     } catch (error) {
         console.error('❌ Error exploring database:', error);
     } finally {
-        await db.end();
-        console.log('\n✅ Database connection closed.');
+        db.close((err) => {
+            if (err) {
+                console.error('Error closing database:', err.message);
+            } else {
+                console.log('\n✅ Database connection closed.');
+            }
+        });
     }
 }
 

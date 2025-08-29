@@ -10,12 +10,7 @@
     "test:frontend": "jest frontend-ratings.test.js",
     "test:integration": "jest ratings-integration.test.js",
     "test:all": "jest *.test.js",
-    "test:verbose": "jest --verbose",
-    "security:audit": "npm audit --audit-level moderate",
-    "security:fix": "npm audit fix",
-    "security:scan": "npm audit && npm run security:deps",
-    "security:deps": "npm outdated || true",
-    "security:report": "npm audit --json > security-audit-tests.json"
+    "test:verbose": "jest --verbose"
   },
   "devDependencies": {
     "jest": "^29.7.0",
@@ -25,7 +20,7 @@
     "@jest/globals": "^29.7.0"
   },
   "dependencies": {
-    "pg": "^8.16.3",
+    "better-sqlite3": "^9.2.2",
     "bcrypt": "^5.1.1",
     "jsonwebtoken": "^9.0.2"
   },
