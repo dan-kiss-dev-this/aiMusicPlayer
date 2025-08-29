@@ -26,10 +26,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
+          # Don't cache for lint job since it doesn't install dependencies
 
       - name: Run ESLint (if configured)
         run: |
@@ -66,6 +63,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            tests/package-lock.json
 
       - name: Install main dependencies
         run: npm ci
@@ -171,6 +171,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            tests/package-lock.json
 
       - name: Install main dependencies
         run: npm ci
@@ -252,6 +255,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            tests/package-lock.json
 
       - name: Install dependencies
         run: |
