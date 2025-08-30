@@ -11,7 +11,7 @@ on:
       pr_number:
         description: 'PR number to review'
         required: true
-        type: number
+        default: '7'
 
 env:
   NODE_VERSION: '18'
