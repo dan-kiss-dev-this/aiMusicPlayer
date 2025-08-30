@@ -144,7 +144,6 @@ build/
 dist/
 
 # Package managers
-package-lock.json
 yarn.lock
 
 # Audio/Media files (uncomment if you don't want to track large media files)
