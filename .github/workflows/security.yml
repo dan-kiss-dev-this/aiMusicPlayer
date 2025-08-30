@@ -299,21 +299,45 @@ jobs:
           echo "## Custom Secret Scan Results" > secret-scan-report.md
           
           # Database URLs
-          if grep -r -n "postgres://.*:.*@" . --exclude-dir=node_modules --exclude-dir=.git > db-secrets.txt 2>/dev/null; then
+          if grep -r -n "postgres://.*:.*@" . \
+            --exclude-dir=node_modules \
+            --exclude-dir=.git \
+            --exclude-dir=security-reports \
+            --exclude-dir=logs \
+            --exclude-dir=music \
+            --exclude-dir=backups \
+            --exclude-dir=data \
+            --binary-files=without-match > db-secrets.txt 2>/dev/null; then
             echo "### Database URLs Found:" >> secret-scan-report.md
             cat db-secrets.txt >> secret-scan-report.md
             echo "" >> secret-scan-report.md
           fi
           
           # API Keys
-          if grep -r -n -i "api[_-]key.*=.*['\"][^'\"]*['\"]" . --exclude-dir=node_modules --exclude-dir=.git > api-keys.txt 2>/dev/null; then
+          if grep -r -n -i "api[_-]key.*=.*['\"][^'\"]*['\"]" . \
+            --exclude-dir=node_modules \
+            --exclude-dir=.git \
+            --exclude-dir=security-reports \
+            --exclude-dir=logs \
+            --exclude-dir=music \
+            --exclude-dir=backups \
+            --exclude-dir=data \
+            --binary-files=without-match > api-keys.txt 2>/dev/null; then
             echo "### Potential API Keys Found:" >> secret-scan-report.md
             cat api-keys.txt >> secret-scan-report.md
             echo "" >> secret-scan-report.md
           fi
           
           # Private keys
-          if grep -r -n "BEGIN.*PRIVATE.*KEY" . --exclude-dir=node_modules --exclude-dir=.git > private-keys.txt 2>/dev/null; then
+          if grep -r -n "BEGIN.*PRIVATE.*KEY" . \
+            --exclude-dir=node_modules \
+            --exclude-dir=.git \
+            --exclude-dir=security-reports \
+            --exclude-dir=logs \
+            --exclude-dir=music \
+            --exclude-dir=backups \
+            --exclude-dir=data \
+            --binary-files=without-match > private-keys.txt 2>/dev/null; then
             echo "### Private Keys Found:" >> secret-scan-report.md
             cat private-keys.txt >> secret-scan-report.md
           fi
