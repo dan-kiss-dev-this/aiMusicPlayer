@@ -102,6 +102,11 @@ document.addEventListener('DOMContentLoaded', () => {
     loadSongHistory(); // Load and display recent tracks on page load
     setCurrentPlayingSong(); // Set the current playing song
     
+    // Force rating display to be visible for live stream
+    setTimeout(() => {
+        updateRatingDisplay();
+    }, 1000);
+    
     // Update recent tracks time display every minute
     setInterval(() => {
         updateRecentTracksUI();
@@ -787,14 +792,16 @@ async function handleRating(rating) {
         if (!currentTitle || !currentArtist || 
             currentTitle.textContent === 'No track playing' || 
             currentArtist.textContent === '-') {
-            console.log('❌ No valid track info found in DOM');
-            showNotification('No track is currently playing to rate', 'error');
-            return;
+            // Use live stream as fallback when no specific track is detected
+            console.log('📻 No specific track detected, using live stream for rating');
+            songTitle = 'Radio Calico Live Stream';
+            songArtist = 'Live Broadcast';
+            console.log('✅ Using live stream fallback:', { songTitle, songArtist });
+        } else {
+            songTitle = currentTitle.textContent;
+            songArtist = currentArtist.textContent;
+            console.log('✅ Using DOM elements:', { songTitle, songArtist });
         }
-        
-        songTitle = currentTitle.textContent;
-        songArtist = currentArtist.textContent;
-        console.log('✅ Using DOM elements:', { songTitle, songArtist });
     }
 
     console.log('📤 Preparing to submit rating:', {
@@ -840,25 +847,25 @@ async function handleRating(rating) {
 async function updateRatingDisplay(songTitle = null, songArtist = null) {
     if (!trackRating) return;
 
+    // Always show rating section - it can work with live stream
+    trackRating.style.display = 'flex';
+
     // If no song specified, get current song
     if (!songTitle || !songArtist) {
         const currentTitleEl = document.getElementById('current-title');
         const currentArtistEl = document.getElementById('current-artist');
         
+        // Use live stream as default if no specific track
         if (!currentTitleEl || !currentArtistEl || 
             currentTitleEl.textContent === 'No track playing' || 
             currentArtistEl.textContent === '-') {
-            // Hide rating section if no track is playing
-            trackRating.style.display = 'none';
-            return;
+            songTitle = 'Radio Calico Live Stream';
+            songArtist = 'Live Broadcast';
+        } else {
+            songTitle = currentTitleEl.textContent;
+            songArtist = currentArtistEl.textContent;
         }
-        
-        songTitle = currentTitleEl.textContent;
-        songArtist = currentArtistEl.textContent;
     }
-
-    // Show rating section
-    trackRating.style.display = 'flex';
 
     try {
         const encodedTitle = encodeURIComponent(songTitle);
@@ -1392,7 +1399,7 @@ function updateCurrentTrackDisplay(metadata) {
             trackInfo.artist && trackInfo.artist !== 'Radio Station') {
             updateRatingDisplay(trackInfo.title, trackInfo.artist);
         } else {
-            updateRatingDisplay(); // This will hide the rating section
+            updateRatingDisplay(); // This will show the rating section for live stream
         }
 
         // Add to recently played if it's a new track
