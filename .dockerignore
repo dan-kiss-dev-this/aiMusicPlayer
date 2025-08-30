@@ -50,6 +50,13 @@ Thumbs.db
 README.md
 CLAUDE.md
 
+# Security reports (large files)
+security-reports/
+*.txt
+
+# Additional large directories
+# music/
+
 # Docker
 docker-compose*.yml
 Dockerfile*
