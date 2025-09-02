@@ -400,8 +400,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build image for scanning
-        run: docker build -t radiocalico:scan .
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: production
+          push: false
+          tags: radiocalico:scan
+          cache-from: type=gha
+          load: true  # Ensure image is available locally for scanning
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
