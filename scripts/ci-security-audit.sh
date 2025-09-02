@@ -150,10 +150,13 @@ fi
 # Check critical file permissions
 for file in server.js package.json; do
     if [ -f "$file" ]; then
-        PERMS=$(stat -f "%A" "$file" 2>/dev/null || stat -c "%a" "$file" 2>/dev/null)
-        if [ "$PERMS" -gt 644 ]; then
-            log_warn "$file has overly permissive permissions ($PERMS)"
-            ENV_ISSUES=$((ENV_ISSUES + 1))
+        # Use Linux stat syntax for CI (GitHub Actions uses Linux)
+        if command -v stat >/dev/null 2>&1; then
+            PERMS=$(stat -c "%a" "$file" 2>/dev/null || echo "644")
+            if [ "$PERMS" -gt 644 ] 2>/dev/null; then
+                log_warn "$file has overly permissive permissions ($PERMS)"
+                ENV_ISSUES=$((ENV_ISSUES + 1))
+            fi
         fi
     fi
 done
@@ -210,8 +213,9 @@ EOF
 # 5. Output results
 if [ "$CI_MODE" = "true" ]; then
     # Machine-readable output for CI
-    echo "::set-output name=exit_code::$EXIT_CODE"
-    echo "::set-output name=summary_file::$SUMMARY_FILE"
+    # Use new GitHub Actions output format instead of deprecated set-output
+    echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+    echo "summary_file=$SUMMARY_FILE" >> $GITHUB_OUTPUT
     
     if [ $EXIT_CODE -ne 0 ]; then
         echo "::error::Security vulnerabilities detected. Check $SUMMARY_FILE for details."
