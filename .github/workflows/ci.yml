@@ -346,6 +346,7 @@ jobs:
           tags: radiocalico:dev
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          load: true  # This ensures the image is loaded into the local Docker daemon
 
       - name: Build production image
         uses: docker/build-push-action@v5
@@ -356,10 +357,16 @@ jobs:
           tags: radiocalico:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          load: true  # This ensures the image is loaded into the local Docker daemon
 
       - name: Test production image
         run: |
           echo "🧪 Testing production Docker image..."
+          
+          # Verify the image exists
+          docker images radiocalico:latest
+          
+          # Run the container
           docker run --rm -d --name test-container \
             -e NODE_ENV=production \
             -e DB_HOST=localhost \
@@ -379,7 +386,7 @@ jobs:
             docker stop test-container
           else
             echo "❌ Production image failed to start"
-            docker logs test-container
+            docker logs test-container || echo "No logs available"
             exit 1
           fi
 
