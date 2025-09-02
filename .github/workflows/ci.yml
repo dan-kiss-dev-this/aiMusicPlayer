@@ -417,14 +417,7 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: 'radiocalico:scan'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-
-      - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v2
-        if: always()
-        with:
-          sarif_file: 'trivy-results.sarif'
+          format: 'table'
 
       - name: Run Trivy scanner for summary
         uses: aquasecurity/trivy-action@master
