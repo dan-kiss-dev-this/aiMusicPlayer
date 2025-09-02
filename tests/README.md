@@ -1,6 +1,6 @@
 # Radio Calico Ratings System - Testing Framework
 
-## Overview
+## Overview of Testing
 
 This testing framework provides comprehensive coverage for the Radio Calico ratings system, including unit tests, integration tests, and end-to-end testing scenarios.
 
