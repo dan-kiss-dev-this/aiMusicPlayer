@@ -127,20 +127,22 @@ jobs:
           
           # Look for potential hardcoded secrets (actual values, not just references)
           # This pattern looks for assignments with actual string values, not just variable names
-          if grep -E '\+.*[^_](password|secret|key|token)[^_]*\s*=\s*["\'][^"\']{8,}["\']' pr-diff.txt | \
-             grep -v -E '(test|example|placeholder|dummy|fake|mock|\.env|process\.env|os\.environ)'; then
-            echo "❌ Potential hardcoded secrets found in PR changes!"
-            echo "Please review the changes and ensure no actual secret values are hardcoded."
-            echo "Found patterns:"
-            grep -E '\+.*[^_](password|secret|key|token)[^_]*\s*=\s*["\'][^"\']{8,}["\']' pr-diff.txt | \
-            grep -v -E '(test|example|placeholder|dummy|fake|mock|\.env|process\.env|os\.environ)' | head -3
-            echo ""
-            echo "💡 Use environment variables instead: os.environ.get('YOUR_SECRET')"
-            exit 1
-          else
-            echo "✅ No hardcoded secrets found in PR"
-            echo "✅ Environment variable usage detected - this is the correct approach!"
+          if grep -E '\+.*(password|secret|key|token).*=.*["'"'"'][^"'"'"']{8,}["'"'"']' pr-diff.txt | \
+             grep -v -E "(test|example|placeholder|dummy|fake|mock|\.env|process\.env|os\.environ)" > secrets-found.txt; then
+            
+            if [ -s secrets-found.txt ]; then
+              echo "❌ Potential hardcoded secrets found in PR changes!"
+              echo "Please review the changes and ensure no actual secret values are hardcoded."
+              echo "Found patterns:"
+              head -3 secrets-found.txt
+              echo ""
+              echo "💡 Use environment variables instead: os.environ.get('YOUR_SECRET')"
+              exit 1
+            fi
           fi
+          
+          echo "✅ No hardcoded secrets found in PR"
+          echo "✅ Environment variable usage detected - this is the correct approach!"
 
   # Fast test for critical paths
   pr-test:
