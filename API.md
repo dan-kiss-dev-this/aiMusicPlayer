@@ -1,54 +1,58 @@
-# Radio Calico API Documentation
+# API Documentation - Radio Calico
 
-Complete API reference for the Radio Calico Music Streaming Platform.
+Complete API reference for the Radio Calico music streaming platform.
 
 ## Base URL
-
-- **Development**: `http://localhost:3000`
-- **Production**: `http://localhost` (or your domain)
+```
+Development: http://localhost:3000/api
+Production: https://your-domain.com/api
+```
 
 ## Authentication
 
-Most endpoints require JWT authentication. Include the token in the Authorization header:
+Radio Calico uses JWT (JSON Web Tokens) for authentication. Include the token in the Authorization header:
 
 ```
-Authorization: Bearer <your_jwt_token>
+Authorization: Bearer <your-jwt-token>
 ```
 
-## Response Format
+### Authentication Endpoints
 
-All API responses follow a consistent JSON format:
-
-### Success Response
-```json
-{
-  "success": true,
-  "data": { ... },
-  "message": "Operation completed successfully"
-}
+#### Register User
+```http
+POST /api/auth/register
 ```
 
-### Error Response
-```json
-{
-  "success": false,
-  "error": "Error message",
-  "details": { ... }
-}
-```
-
-## Authentication Endpoints
-
-### Register User
-Creates a new user account.
-
-**Endpoint**: `POST /api/auth/register`
-
-**Request Body**:
+**Request Body:**
 ```json
 {
   "username": "string (required, 3-50 chars)",
   "email": "string (required, valid email)",
+  "password": "string (required, min 6 chars)",
+  "firstName": "string (optional, max 50 chars)",
+  "lastName": "string (optional, max 50 chars)"
+}
+```
+
+**Response (201):**
+```json
+{
+  "message": "User registered successfully",
+  "token": "jwt-token-string",
+  "user": {
+    "id": 1,
+    "username": "johndoe",
+    "email": "john@example.com",
+    "firstName": "John",
+    "lastName": "Doe",
+    "created_at": "2025-09-01T10:00:00.000Z"
+  }
+}
+```
+
+**Error Responses:**
+- `400` - Validation error (username taken, invalid email, etc.)
+- `500` - Internal server error
   "password": "string (required, min 6 chars)"
 }
 ```
