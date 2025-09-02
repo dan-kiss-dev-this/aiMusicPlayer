@@ -275,10 +275,16 @@ jobs:
           fi
           npm ci
 
+      - name: Setup Docker Compose
+        run: |
+          echo "🐳 Setting up Docker Compose..."
+          # GitHub Actions runners now use 'docker compose' (v2) instead of 'docker-compose'
+          docker compose version || echo "Docker Compose v2 not available, trying v1..."
+
       - name: Start test environment with Docker
         run: |
           echo "🐳 Starting integration test environment..."
-          docker-compose -f docker-compose.dev.yml up -d
+          docker compose -f docker-compose.dev.yml up -d
           
           # Wait for PostgreSQL to be ready first
           echo "⏳ Waiting for PostgreSQL to be ready..."
@@ -297,7 +303,7 @@ jobs:
       - name: Cleanup test environment
         if: always()
         run: |
-          docker-compose -f docker-compose.dev.yml down -v
+          docker compose -f docker-compose.dev.yml down -v
           docker system prune -f
 
   # Docker Build Test
@@ -407,7 +413,7 @@ jobs:
           echo "🚀 Testing production deployment..."
           
           # Start production environment
-          docker-compose -f docker-compose.prod.yml up -d
+          docker compose -f docker-compose.prod.yml up -d
           
           # Wait for services to be ready
           timeout 120 bash -c 'until curl -f http://localhost/health; do sleep 5; done'
@@ -421,7 +427,7 @@ jobs:
       - name: Cleanup deployment test
         if: always()
         run: |
-          docker-compose -f docker-compose.prod.yml down -v
+          docker compose -f docker-compose.prod.yml down -v
           docker system prune -f
 
   # Dependency Check
