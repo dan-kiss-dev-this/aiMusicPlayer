@@ -1,0 +1,47 @@
+name: radiocalico
+services:
+- name: web
+  source_dir: /
+  github:
+    repo: dan-kiss-dev-this/aiMusicPlayer
+    branch: main
+    deploy_on_push: true
+  run_command: npm start
+  build_command: npm ci --only=production
+  environment_slug: node-js
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  http_port: 3000
+  routes:
+  - path: /
+  health_check:
+    http_path: /health
+    initial_delay_seconds: 60
+    period_seconds: 10
+    timeout_seconds: 5
+    success_threshold: 1
+    failure_threshold: 3
+  envs:
+  - key: NODE_ENV
+    value: production
+  - key: PORT
+    value: "3000"
+  - key: JWT_SECRET
+    value: "your-super-secure-jwt-secret-change-this-in-production"
+    type: SECRET
+  - key: LOG_LEVEL
+    value: info
+  - key: CORS_ORIGIN
+    value: "*"
+  # Database connection - DigitalOcean will auto-configure this
+  - key: DATABASE_URL
+    value: ${db.DATABASE_URL}
+    type: SECRET
+
+databases:
+- name: db
+  engine: PG
+  version: "15"
+  production: false
+
+region: nyc1

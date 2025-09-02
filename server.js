@@ -31,19 +31,33 @@ app.use(session({
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Initialize PostgreSQL database
-const pool = new Pool({
-  user: process.env.DB_USER || 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'radiocalico',
-  password: process.env.DB_PASSWORD || 'password',
-  port: process.env.DB_PORT || 5432,
-});
+let dbConfig;
+
+if (process.env.DATABASE_URL) {
+  // Parse DATABASE_URL for DigitalOcean App Platform
+  dbConfig = {
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  };
+} else {
+  // Fallback to individual environment variables for local development
+  dbConfig = {
+    user: process.env.DB_USER || 'postgres',
+    host: process.env.DB_HOST || 'localhost',
+    database: process.env.DB_NAME || 'radiocalico',
+    password: process.env.DB_PASSWORD || 'password',
+    port: process.env.DB_PORT || 5432,
+  };
+}
+
+const pool = new Pool(dbConfig);
 
 // Test database connection and create tables
 pool.connect((err, client, release) => {
   if (err) {
     logger.error('Failed to connect to PostgreSQL', { 
       error: err.message,
+      config: process.env.DATABASE_URL ? 'Using DATABASE_URL' : 'Using individual env vars',
       host: process.env.DB_HOST || 'localhost',
       database: process.env.DB_NAME || 'radiocalico'
     });
@@ -611,8 +625,24 @@ app.get('/', (req, res) => {
 });
 
 // Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+app.get('/health', async (req, res) => {
+  try {
+    // Test database connection
+    await pool.query('SELECT 1');
+    res.json({ 
+      status: 'OK', 
+      timestamp: new Date().toISOString(),
+      database: 'connected'
+    });
+  } catch (error) {
+    logger.error('Health check failed - database connection error', { error: error.message });
+    res.status(503).json({ 
+      status: 'ERROR', 
+      timestamp: new Date().toISOString(),
+      database: 'disconnected',
+      error: error.message
+    });
+  }
 });
 
 // Error handling middleware
