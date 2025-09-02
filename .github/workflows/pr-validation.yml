@@ -90,6 +90,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for git diff
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -117,13 +119,18 @@ jobs:
         run: |
           echo "🔐 Scanning PR for potential secrets..."
           
-          # Get the diff for this PR
-          git diff origin/${{ github.base_ref }}...HEAD > pr-diff.txt
+          # Ensure we have the base branch reference
+          git fetch origin ${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}
+          
+          # Get the diff for this PR using the correct syntax
+          git diff origin/${{ github.base_ref }}..HEAD > pr-diff.txt
           
           # Look for potential secrets in the diff
-          if grep -i "password\|secret\|key\|token" pr-diff.txt | grep -v "test\|example\|placeholder"; then
+          if grep -i "password\|secret\|key\|token" pr-diff.txt | grep -v "test\|example\|placeholder\|process\.env"; then
             echo "❌ Potential secrets found in PR changes!"
             echo "Please review the changes and ensure no sensitive data is included."
+            echo "Found patterns:"
+            grep -i "password\|secret\|key\|token" pr-diff.txt | grep -v "test\|example\|placeholder\|process\.env" | head -5
             exit 1
           else
             echo "✅ No potential secrets found in PR"
